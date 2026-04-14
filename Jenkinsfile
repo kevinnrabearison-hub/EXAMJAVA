@@ -70,22 +70,24 @@ pipeline {
             }
         }
 
-        stage('Build Maven') {
-            steps {
-                sh '''
-                    echo "=== Build Maven ==="
-                    ls -la
-                    test -f pom.xml || (echo "pom.xml introuvable" && exit 1)
-                    docker run --rm \
-                        -v "$(pwd)":/app \
-                        -v "$HOME/.m2":/root/.m2 \
-                        -w /app \
-                        maven:3.9.6-eclipse-temurin-17 \
-                        mvn clean package -DskipTests -B --no-transfer-progress
-                    ls -lh target/*.jar
-                '''
-            }
-        }
+stage('Build Maven') {
+    steps {
+        sh '''
+            echo "=== Build Maven ==="
+            ls -la
+            test -f pom.xml || (echo "pom.xml introuvable" && exit 1)
+
+            docker run --rm \
+                -v "${WORKSPACE}":/app \
+                -v "/var/jenkins_home/.m2":/root/.m2 \
+                -w /app \
+                maven:3.9.6-eclipse-temurin-17 \
+                mvn clean package -DskipTests -B --no-transfer-progress
+
+            ls -lh target/*.jar
+        '''
+    }
+}
 
         stage('OWASP') {
             steps {
