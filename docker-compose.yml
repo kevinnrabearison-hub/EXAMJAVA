@@ -1,0 +1,77 @@
+version: "3.9"
+
+# ============================================================
+# FoodFrenzy — Stack de déploiement locale
+# Containers : foodfrenzy-app + foodfrenzy-db
+# Réseau DB : interne (MySQL jamais exposé à l'extérieur)
+# ============================================================
+
+services:
+
+  # ------------------------------------------------------------
+  # MySQL 8.0 — Base de données
+  # ------------------------------------------------------------
+  foodfrenzy-db:
+    image: mysql:8.0
+    container_name: foodfrenzy-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE:      FoodFrenzy
+      MYSQL_USER:          ${DB_USER}
+      MYSQL_PASSWORD:      ${DB_PASSWORD}
+    volumes:
+      - foodfrenzy-db-data:/var/lib/mysql   # données persistantes
+    networks:
+      - db-net                               # réseau interne uniquement
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "root", "--password=${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ------------------------------------------------------------
+  # Spring Boot — Application FoodFrenzy
+  # ------------------------------------------------------------
+  foodfrenzy-app:
+    image: ${HARBOR_HOST}/foodfrenzy/foodfrenzy-app:${IMAGE_TAG:-latest}
+    container_name: foodfrenzy-app
+    restart: unless-stopped
+    depends_on:
+      foodfrenzy-db:
+        condition: service_healthy     # attend que MySQL soit prêt
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_USER:     ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8090:8080"                    # accessible sur localhost:8090
+    networks:
+      - db-net                         # parle à MySQL
+      - app-net                        # accessible depuis l'extérieur
+    healthcheck:
+      test: ["CMD-SHELL",
+             "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+# ------------------------------------------------------------
+# Volumes
+# ------------------------------------------------------------
+volumes:
+  foodfrenzy-db-data:
+    driver: local
+
+# ------------------------------------------------------------
+# Réseaux
+# ------------------------------------------------------------
+networks:
+  db-net:
+    driver: bridge
+    internal: true    # ← MySQL JAMAIS exposé sur le host
+  app-net:
+    driver: bridge
