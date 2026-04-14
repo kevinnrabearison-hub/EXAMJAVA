@@ -59,10 +59,10 @@ pipeline {
                 stage('Semgrep') {
                     steps {
                         echo "--- Semgrep : scan du code Java ---"
-                        sh '''
+                        sh """
                             mkdir -p reports
                             docker run --rm \
-                                -v "$(pwd)":/src \
+                                -v "${WORKSPACE}":/src \
                                 --workdir /src \
                                 returntocorp/semgrep:latest semgrep \
                                     --config "p/java" \
@@ -72,25 +72,25 @@ pipeline {
                                     src/ \
                                 || true
                             echo "Semgrep terminé"
-                        '''
+                        """
                     }
-                }   // ← FIX : fermeture de stage('Semgrep')
+                }   // fermeture de stage('Semgrep')
 
                 stage('Gitleaks') {
                     steps {
                         echo "--- Gitleaks : détection de secrets dans le code ---"
-                        sh '''
+                        sh """
                             mkdir -p reports
                             touch reports/gitleaks-report.json
                             docker run --rm \
-                                -v "$(pwd)":/path \
+                                -v "${WORKSPACE}":/path \
                                 zricethezav/gitleaks:latest detect \
                                     --source /path \
                                     --report-format json \
                                     --report-path /path/reports/gitleaks-report.json \
                                     --exit-code 0 || true
                             echo "Gitleaks terminé"
-                        '''
+                        """
                     }
                 }   // fermeture de stage('Gitleaks')
 
@@ -103,14 +103,14 @@ pipeline {
         stage('🔨 Build Maven') {
             steps {
                 echo "=== Compilation Maven (Java 17) ==="
-                sh '''
+                sh """
                     docker run --rm \
-                        -v "$(pwd)":/app \
-                        -v "$HOME/.m2":/root/.m2 \
+                        -v "${WORKSPACE}":/app \
+                        -v "${HOME}/.m2":/root/.m2 \
                         -w /app \
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -B --no-transfer-progress
-                '''
+                """
                 echo "JAR généré :"
                 sh 'ls -lh target/*.jar'
                 archiveArtifacts artifacts: 'target/FoodFrenzy-0.0.1-SNAPSHOT.jar',
@@ -130,11 +130,11 @@ pipeline {
         stage('🛡️ OWASP Dependency Check') {
             steps {
                 echo "=== Scan des dépendances Maven (CVE) ==="
-                sh '''
+                sh """
                     mkdir -p reports
                     docker run --rm \
-                        -v "$(pwd)":/src \
-                        -v "$(pwd)/reports":/report \
+                        -v "${WORKSPACE}":/src \
+                        -v "${WORKSPACE}/reports":/report \
                         owasp/dependency-check:latest \
                             --scan /src \
                             --format JSON \
@@ -144,7 +144,7 @@ pipeline {
                             --failOnCVSS 10 \
                         || true
                     echo "OWASP scan terminé"
-                '''
+                """
                 publishHTML([
                     allowMissing:          true,
                     alwaysLinkToLastBuild: true,
@@ -191,7 +191,7 @@ pipeline {
                     # Rapport JSON (archivé)
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v \$(pwd)/reports:/reports \
+                        -v "${WORKSPACE}/reports":/reports \
                         aquasec/trivy:latest image \
                             --exit-code 0 \
                             --severity HIGH,CRITICAL \
@@ -222,7 +222,7 @@ pipeline {
                     # Générer une paire de clés si elle n'existe pas
                     if [ ! -f cosign.key ]; then
                         docker run --rm \
-                            -v \$(pwd):/workspace \
+                            -v "${WORKSPACE}":/workspace \
                             -e COSIGN_PASSWORD="" \
                             gcr.io/projectsigstore/cosign:v2.2.0 \
                             generate-key-pair \
@@ -233,7 +233,7 @@ pipeline {
                     # Signer l'image (sans registry push, juste en local)
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v \$(pwd):/workspace \
+                        -v "${WORKSPACE}":/workspace \
                         -e COSIGN_PASSWORD="" \
                         gcr.io/projectsigstore/cosign:v2.2.0 \
                         sign \
