@@ -37,6 +37,11 @@ pipeline {
         // ====================================================
         // STAGE 1 — Checkout
         // ====================================================
+        stage('Clean workspace') {
+    steps {
+        cleanWs()
+    }
+}
         stage('📥 Checkout') {
             steps {
                 echo "=== Récupération du code source ==="
