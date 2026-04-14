@@ -74,24 +74,28 @@ pipeline {
                             echo "Semgrep terminé"
                         '''
                     }
-                }
-        stage('Gitleaks') {
-            steps {
-                echo "--- Gitleaks : détection de secrets dans le code ---"
-                sh '''
-                    mkdir -p reports
-                    touch reports/gitleaks-report.json
-                    docker run --rm \
-                        -v "$(pwd)":/path \
-                        zricethezav/gitleaks:latest detect \
-                            --source /path \
-                            --report-format json \
-                            --report-path /path/reports/gitleaks-report.json \
-                            --exit-code 0 || true
-                    echo "Gitleaks terminé"
-                '''
-            }
-        }
+                }   // ← FIX : fermeture de stage('Semgrep')
+
+                stage('Gitleaks') {
+                    steps {
+                        echo "--- Gitleaks : détection de secrets dans le code ---"
+                        sh '''
+                            mkdir -p reports
+                            touch reports/gitleaks-report.json
+                            docker run --rm \
+                                -v "$(pwd)":/path \
+                                zricethezav/gitleaks:latest detect \
+                                    --source /path \
+                                    --report-format json \
+                                    --report-path /path/reports/gitleaks-report.json \
+                                    --exit-code 0 || true
+                            echo "Gitleaks terminé"
+                        '''
+                    }
+                }   // fermeture de stage('Gitleaks')
+
+            }   // ← FIX : fermeture de parallel { }
+        }       // ← FIX : fermeture de stage('SAST')
 
         // ====================================================
         // STAGE 3 — Build Maven + Tests unitaires
@@ -142,12 +146,12 @@ pipeline {
                     echo "OWASP scan terminé"
                 '''
                 publishHTML([
-                    allowMissing:        true,
+                    allowMissing:          true,
                     alwaysLinkToLastBuild: true,
                     keepAll:               true,
-                    reportDir:           'reports',
-                    reportFiles:         'dependency-check-report.html',
-                    reportName:          'OWASP Dependency Check'
+                    reportDir:             'reports',
+                    reportFiles:           'dependency-check-report.html',
+                    reportName:            'OWASP Dependency Check'
                 ])
             }
         }
@@ -334,7 +338,7 @@ pipeline {
                     done
 
                     echo ""
-                    echo " Application opérationnelle !"
+                    echo "✅ Application opérationnelle !"
                     echo "--- Health Check ---"
                     curl -s http://localhost:8090/actuator/health | python3 -m json.tool
                     echo ""
