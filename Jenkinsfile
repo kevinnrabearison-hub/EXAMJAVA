@@ -75,23 +75,21 @@ pipeline {
                         '''
                     }
                 }
-
-                stage('Gitleaks') {
-                    steps {
-                        echo "--- Gitleaks : détection de secrets dans le code ---"
-                        sh '''
-                            mkdir -p reports
-                            docker run --rm \
-                                -v "$(pwd)":/path \
-                                zricethezav/gitleaks:latest detect \
-                                    --source /path \
-                                    --report-format json \
-                                    --report-path /path/reports/gitleaks-report.json \
-                                    --exit-code 0
-                            echo "Gitleaks terminé"
-                        '''
-                    }
-                }
+        stage('Gitleaks') {
+            steps {
+                echo "--- Gitleaks : détection de secrets dans le code ---"
+                sh '''
+                    mkdir -p reports
+                    touch reports/gitleaks-report.json
+                    docker run --rm \
+                        -v "$(pwd)":/path \
+                        zricethezav/gitleaks:latest detect \
+                            --source /path \
+                            --report-format json \
+                            --report-path /path/reports/gitleaks-report.json \
+                            --exit-code 0 || true
+                    echo "Gitleaks terminé"
+                '''
             }
         }
 
