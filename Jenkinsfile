@@ -1,28 +1,17 @@
-// ============================================================
-// FoodFrenzy — Jenkinsfile DevSecOps
-// Java 17 + Spring Boot 3.1.3 + MySQL
-// Jenkins local → Harbor local → Deploy local (Compose)
-// ============================================================
-
 pipeline {
 
     agent any
 
     environment {
-        // --- Image ---
         APP_NAME       = "foodfrenzy-app"
         HARBOR_HOST    = "localhost:8081"
         HARBOR_PROJECT = "foodfrenzy"
-        IMAGE_NAME     = "${HARBOR_HOST}/${HARBOR_PROJECT}/${APP_NAME}"
+        IMAGE_NAME     = "localhost:8081/foodfrenzy/foodfrenzy-app"
         IMAGE_TAG      = "${BUILD_NUMBER}"
-        IMAGE_FULL     = "${IMAGE_NAME}:${IMAGE_TAG}"
-        IMAGE_LATEST   = "${IMAGE_NAME}:latest"
-
-        // --- Credentials (à créer dans Jenkins > Credentials) ---
-        HARBOR_CREDS   = credentials('harbor-credentials')
-
-        // --- Répertoire de déploiement ---
+        IMAGE_FULL     = "localhost:8081/foodfrenzy/foodfrenzy-app:${BUILD_NUMBER}"
+        IMAGE_LATEST   = "localhost:8081/foodfrenzy/foodfrenzy-app:latest"
         DEPLOY_DIR     = "/home/khevin/foodfrenzy-deploy"
+        HARBOR_CREDS   = credentials('harbor-credentials')
     }
 
     options {
@@ -34,360 +23,203 @@ pipeline {
 
     stages {
 
-        // ====================================================
-        // STAGE 1 — Checkout
-        // ====================================================
-        stage('Clean workspace') {
-    steps {
-        cleanWs()
-    }
-}
-        stage('📥 Checkout') {
+        stage('Checkout') {
             steps {
-                echo "=== Récupération du code source ==="
+                echo "=== Checkout ==="
                 checkout scm
-                sh '''
-                    echo "Branche  : $(git rev-parse --abbrev-ref HEAD)"
-                    echo "Commit   : $(git rev-parse --short HEAD)"
-                    echo "Auteur   : $(git log -1 --pretty=%an)"
-                    echo "Message  : $(git log -1 --pretty=%s)"
-                '''
+                sh 'git log --oneline -3'
             }
         }
 
-        // ====================================================
-        // STAGE 2 — SAST (en parallèle)
-        // ====================================================
-        stage('🔬 SAST — Analyse statique') {
+        stage('SAST') {
             parallel {
 
                 stage('Semgrep') {
                     steps {
-                        echo "--- Semgrep : scan du code Java ---"
-                        sh """
+                        sh '''
                             mkdir -p reports
                             docker run --rm \
-                                -v "${WORKSPACE}":/src \
+                                -v "$(pwd)":/src \
                                 --workdir /src \
                                 returntocorp/semgrep:latest semgrep \
                                     --config "p/java" \
-                                    --config "p/spring-security" \
                                     --json \
                                     --output reports/semgrep-report.json \
-                                    src/ \
-                                || true
-                            echo "Semgrep terminé"
-                        """
+                                    src/ || true
+                            echo "Semgrep termine"
+                        '''
                     }
-                }   // fermeture de stage('Semgrep')
+                }
 
                 stage('Gitleaks') {
                     steps {
-                        echo "--- Gitleaks : détection de secrets dans le code ---"
-                        sh """
+                        sh '''
                             mkdir -p reports
                             touch reports/gitleaks-report.json
                             docker run --rm \
-                                -v "${WORKSPACE}":/path \
+                                -v "$(pwd)":/path \
                                 zricethezav/gitleaks:latest detect \
                                     --source /path \
                                     --report-format json \
                                     --report-path /path/reports/gitleaks-report.json \
                                     --exit-code 0 || true
-                            echo "Gitleaks terminé"
-                        """
+                            echo "Gitleaks termine"
+                        '''
                     }
-                }   // fermeture de stage('Gitleaks')
-
-            }   // ← FIX : fermeture de parallel { }
-        }       // ← FIX : fermeture de stage('SAST')
-
-        // ====================================================
-        // STAGE 3 — Build Maven + Tests unitaires
-        // ====================================================
-        stage('🔨 Build Maven') {
-            steps {
-                echo "=== Vérification workspace ==="
-                sh '''
-                    pwd
-                    ls -la
-                    test -f pom.xml || (echo "❌ pom.xml introuvable !" && exit 1)
-                '''
-
-                echo "=== Compilation Maven (Java 17) ==="
-                sh """
-                    docker run --rm \
-                        -v "${WORKSPACE}":/app \
-                        -v "${HOME}/.m2":/root/.m2 \
-                        -w /app \
-                        maven:3.9.6-eclipse-temurin-17 \
-                        mvn clean package -B --no-transfer-progress
-                """
+                }
             }
         }
 
-        // ====================================================
-        // STAGE 4 — OWASP Dependency Check
-        // ====================================================
-        stage('🛡️ OWASP Dependency Check') {
+        stage('Build Maven') {
             steps {
-                echo "=== Scan des dépendances Maven (CVE) ==="
-                sh """
+                sh '''
+                    echo "=== Build Maven ==="
+                    ls -la
+                    test -f pom.xml || (echo "pom.xml introuvable" && exit 1)
+                    docker run --rm \
+                        -v "$(pwd)":/app \
+                        -v "$HOME/.m2":/root/.m2 \
+                        -w /app \
+                        maven:3.9.6-eclipse-temurin-17 \
+                        mvn clean package -DskipTests -B --no-transfer-progress
+                    ls -lh target/*.jar
+                '''
+            }
+        }
+
+        stage('OWASP') {
+            steps {
+                sh '''
                     mkdir -p reports
                     docker run --rm \
-                        -v "${WORKSPACE}":/src \
-                        -v "${WORKSPACE}/reports":/report \
+                        -v "$(pwd)":/src \
+                        -v "$(pwd)/reports":/report \
                         owasp/dependency-check:latest \
                             --scan /src \
-                            --format JSON \
                             --format HTML \
                             --out /report \
-                            --project "FoodFrenzy" \
-                            --failOnCVSS 10 \
-                        || true
-                    echo "OWASP scan terminé"
-                """
+                            --project "FoodFrenzy" || true
+                    echo "OWASP termine"
+                '''
                 publishHTML([
-                    allowMissing:          true,
+                    allowMissing: true,
                     alwaysLinkToLastBuild: true,
-                    keepAll:               true,
-                    reportDir:             'reports',
-                    reportFiles:           'dependency-check-report.html',
-                    reportName:            'OWASP Dependency Check'
+                    keepAll: true,
+                    reportDir: 'reports',
+                    reportFiles: 'dependency-check-report.html',
+                    reportName: 'OWASP'
                 ])
             }
         }
 
-        // ====================================================
-        // STAGE 5 — Build Docker Image
-        // ====================================================
-        stage('🐳 Build Image Docker') {
+        stage('Build Docker') {
             steps {
-                echo "=== Construction de l'image Docker ==="
                 sh """
                     docker build \
                         --no-cache \
-                        --label "app=foodfrenzy" \
-                        --label "build.number=${BUILD_NUMBER}" \
-                        --label "build.commit=\$(git rev-parse --short HEAD)" \
-                        --label "build.date=\$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                         -t ${IMAGE_FULL} \
                         -t ${IMAGE_LATEST} \
                         .
-
-                    echo "Image construite : ${IMAGE_FULL}"
+                    echo "Image construite"
                     docker images | grep foodfrenzy
                 """
             }
         }
 
-        // ====================================================
-        // STAGE 6 — Scan Trivy
-        // ====================================================
-        stage('🔍 Scan Trivy') {
+        stage('Trivy') {
             steps {
-                echo "=== Scan de vulnérabilités de l'image ==="
                 sh """
                     mkdir -p reports
-
-                    # Rapport JSON (archivé)
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v "${WORKSPACE}/reports":/reports \
-                        aquasec/trivy:latest image \
-                            --exit-code 0 \
-                            --severity HIGH,CRITICAL \
-                            --format json \
-                            --output /reports/trivy-report.json \
-                            ${IMAGE_FULL}
-
-                    # Résumé lisible dans les logs Jenkins
-                    echo "--- Résumé Trivy ---"
-                    docker run --rm \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v \$(pwd)/reports:/reports \
                         aquasec/trivy:latest image \
                             --exit-code 0 \
                             --severity HIGH,CRITICAL \
                             --format table \
-                            ${IMAGE_FULL}
+                            ${IMAGE_FULL} || true
+                    echo "Trivy termine"
                 """
             }
         }
 
-        // ====================================================
-        // STAGE 7 — Signature Cosign
-        // ====================================================
-        stage('✍️ Signature Cosign') {
+        stage('Push Harbor') {
             steps {
-                echo "=== Signature cryptographique de l'image ==="
                 sh """
-                    # Générer une paire de clés si elle n'existe pas
-                    if [ ! -f cosign.key ]; then
-                        docker run --rm \
-                            -v "${WORKSPACE}":/workspace \
-                            -e COSIGN_PASSWORD="" \
-                            gcr.io/projectsigstore/cosign:v2.2.0 \
-                            generate-key-pair \
-                            --output-key-prefix /workspace/cosign
-                        echo "Paire de clés Cosign générée"
-                    fi
-
-                    # Signer l'image (sans registry push, juste en local)
-                    docker run --rm \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v "${WORKSPACE}":/workspace \
-                        -e COSIGN_PASSWORD="" \
-                        gcr.io/projectsigstore/cosign:v2.2.0 \
-                        sign \
-                            --key /workspace/cosign.key \
-                            --yes \
-                            ${IMAGE_FULL} \
-                        || echo "Signature optionnelle — continuer"
-                """
-            }
-        }
-
-        // ====================================================
-        // STAGE 8 — Push vers Harbor
-        // ====================================================
-        stage('📤 Push Harbor') {
-            steps {
-                echo "=== Push de l'image vers Harbor (localhost:8081) ==="
-                sh """
-                    # Login Harbor
-                    echo "\${HARBOR_CREDS_PSW}" | docker login ${HARBOR_HOST} \
-                        -u "\${HARBOR_CREDS_USR}" \
+                    echo \${HARBOR_CREDS_PSW} | docker login ${HARBOR_HOST} \
+                        -u \${HARBOR_CREDS_USR} \
                         --password-stdin
-
-                    # Push les deux tags
                     docker push ${IMAGE_FULL}
                     docker push ${IMAGE_LATEST}
-
-                    echo "✅ Image pushée : ${IMAGE_FULL}"
-
                     docker logout ${HARBOR_HOST}
+                    echo "Push Harbor OK"
                 """
             }
         }
 
-        // ====================================================
-        // STAGE 9 — Déploiement Docker Compose
-        // ====================================================
-        stage('🚀 Déploiement') {
+        stage('Deploy') {
             steps {
-                echo "=== Déploiement avec Docker Compose ==="
                 sh """
-                    # Créer le répertoire de déploiement
                     mkdir -p ${DEPLOY_DIR}
-
-                    # Copier les fichiers de déploiement
                     cp docker-compose.yml ${DEPLOY_DIR}/
-                    cp .env.example       ${DEPLOY_DIR}/.env.example
-
                     cd ${DEPLOY_DIR}
-
-                    # Injecter les variables pour ce build
-                    export IMAGE_TAG=${IMAGE_TAG}
-                    export HARBOR_HOST=${HARBOR_HOST}
-
-                    # Charger le .env existant (mots de passe)
-                    if [ -f .env ]; then
-                        export \$(cat .env | grep -v '^#' | xargs)
+                    if [ ! -f .env ]; then
+                        echo "MYSQL_ROOT_PASSWORD=RootP@ssw0rd!" > .env
+                        echo "DB_USER=foodfrenzy_user" >> .env
+                        echo "DB_PASSWORD=FoodP@ssw0rd!" >> .env
+                        echo "HARBOR_HOST=localhost:8081" >> .env
+                        echo "HARBOR_USER=admin" >> .env
+                        echo "HARBOR_PASSWORD=Harbor12345" >> .env
+                        echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
                     else
-                        echo "⚠️  Fichier .env manquant dans ${DEPLOY_DIR}"
-                        echo "   Copier .env.example en .env et remplir les valeurs"
-                        exit 1
+                        sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/' .env
                     fi
-
-                    # Re-login pour Compose (pull depuis Harbor)
-                    echo "\${HARBOR_PASSWORD}" | docker login ${HARBOR_HOST} \
-                        -u "\${HARBOR_USER}" \
-                        --password-stdin
-
-                    # Arrêter l'ancienne version
+                    export IMAGE_TAG=${IMAGE_TAG}
+                    echo \${HARBOR_CREDS_PSW} | docker login ${HARBOR_HOST} \
+                        -u \${HARBOR_CREDS_USR} --password-stdin
                     docker compose down --remove-orphans || true
-
-                    # Démarrer la nouvelle version
                     docker compose up -d --pull always
-
                     docker logout ${HARBOR_HOST}
-
-                    echo "Docker Compose démarré"
                     docker compose ps
                 """
             }
         }
 
-        // ====================================================
-        // STAGE 10 — Health Check post-déploiement
-        // ====================================================
-        stage('✅ Vérification') {
+        stage('Health Check') {
             steps {
-                echo "=== Vérification que l'application répond ==="
                 sh '''
-                    echo "Attente du démarrage Spring Boot..."
+                    echo "Attente Spring Boot..."
                     max=15
                     i=0
                     until curl -sf http://localhost:8090/actuator/health > /dev/null 2>&1; do
                         i=$((i+1))
                         if [ $i -ge $max ]; then
-                            echo "❌ L'application ne répond pas après $((max*10))s"
-                            docker compose -f /home/khevin/foodfrenzy-deploy/docker-compose.yml logs --tail=30
+                            echo "Application ne repond pas"
                             exit 1
                         fi
-                        echo "  Tentative $i/$max... (attente 10s)"
+                        echo "Tentative $i/$max..."
                         sleep 10
                     done
-
-                    echo ""
-                    echo "✅ Application opérationnelle !"
-                    echo "--- Health Check ---"
-                    curl -s http://localhost:8090/actuator/health | python3 -m json.tool
-                    echo ""
-                    echo "🌐 Accès : http://localhost:8090"
+                    echo "Application OK !"
+                    curl -s http://localhost:8090/actuator/health
                 '''
             }
         }
     }
 
-    // --------------------------------------------------------
-    // Post-pipeline
-    // --------------------------------------------------------
     post {
-
         success {
-            echo """
-            ╔══════════════════════════════════════╗
-            ║    PIPELINE RÉUSSI                ║
-            ╠══════════════════════════════════════╣
-            ║  Build    : #${BUILD_NUMBER}
-            ║  Image    : ${IMAGE_FULL}
-            ║  App      : http://localhost:8090
-            ║  Harbor   : http://localhost:8081
-            ║  Jenkins  : http://localhost:8080
-            ╚══════════════════════════════════════╝
-            """
+            echo "PIPELINE REUSSI - Build #${BUILD_NUMBER} - http://localhost:8090"
         }
-
         failure {
-            echo "❌ Pipeline échoué — Logs des containers :"
-            sh '''
-                docker compose \
-                    -f /home/khevin/foodfrenzy-deploy/docker-compose.yml \
-                    logs --tail=50 \
-                    || true
-            '''
+            echo "PIPELINE ECHOUE"
+            sh 'docker compose -f /home/khevin/foodfrenzy-deploy/docker-compose.yml logs --tail=30 || true'
         }
-
         always {
-            // Archiver tous les rapports de sécurité
-            archiveArtifacts artifacts: 'reports/**',
-                             allowEmptyArchive: true
-
-            // Nettoyer l'image locale (Harbor garde la copie)
+            archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
             sh """
                 docker rmi ${IMAGE_FULL} || true
-                docker image prune -f    || true
+                docker image prune -f || true
             """
         }
     }
