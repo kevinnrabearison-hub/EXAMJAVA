@@ -146,6 +146,7 @@ pipeline {
                 publishHTML([
                     allowMissing:        true,
                     alwaysLinkToLastBuild: true,
+                    keepAll:               true,
                     reportDir:           'reports',
                     reportFiles:         'dependency-check-report.html',
                     reportName:          'OWASP Dependency Check'
@@ -335,7 +336,7 @@ pipeline {
                     done
 
                     echo ""
-                    echo "✅ Application opérationnelle !"
+                    echo " Application opérationnelle !"
                     echo "--- Health Check ---"
                     curl -s http://localhost:8090/actuator/health | python3 -m json.tool
                     echo ""
@@ -353,7 +354,7 @@ pipeline {
         success {
             echo """
             ╔══════════════════════════════════════╗
-            ║   ✅  PIPELINE RÉUSSI                ║
+            ║    PIPELINE RÉUSSI                ║
             ╠══════════════════════════════════════╣
             ║  Build    : #${BUILD_NUMBER}
             ║  Image    : ${IMAGE_FULL}
