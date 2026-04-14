@@ -102,6 +102,13 @@ pipeline {
         // ====================================================
         stage('🔨 Build Maven') {
             steps {
+                echo "=== Vérification workspace ==="
+                sh '''
+                    pwd
+                    ls -la
+                    test -f pom.xml || (echo "❌ pom.xml introuvable !" && exit 1)
+                '''
+
                 echo "=== Compilation Maven (Java 17) ==="
                 sh """
                     docker run --rm \
@@ -111,16 +118,6 @@ pipeline {
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -B --no-transfer-progress
                 """
-                echo "JAR généré :"
-                sh 'ls -lh target/*.jar'
-                archiveArtifacts artifacts: 'target/FoodFrenzy-0.0.1-SNAPSHOT.jar',
-                                 fingerprint: true
-            }
-            post {
-                always {
-                    junit testResults: 'target/surefire-reports/*.xml',
-                          allowEmptyResults: true
-                }
             }
         }
 
