@@ -26,15 +26,17 @@ pipeline {
 
     stages {
 
-        /* ===================== CLEAN + CHECKOUT ===================== */
+        /* ===================== CHECKOUT ===================== */
         stage('Checkout') {
             steps {
-                echo "=== CLEAN WORKSPACE + CHECKOUT ==="
+                echo "=== CLEAN + CHECKOUT ==="
                 deleteDir()
                 checkout scm
+
                 sh '''
-                    git rev-parse --is-inside-work-tree
-                    git log --oneline -3 || true
+                    echo "WORKSPACE: $WORKSPACE"
+                    ls -la
+                    test -f pom.xml || (echo "ERROR: pom.xml missing" && exit 1)
                 '''
             }
         }
@@ -47,8 +49,9 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
+
                             docker run --rm \
-                                -v "$WORKSPACE":/src \
+                                -v "$WORKSPACE:/src" \
                                 -w /src \
                                 returntocorp/semgrep:latest \
                                 semgrep --config p/java \
@@ -63,8 +66,9 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
+
                             docker run --rm \
-                                -v "$WORKSPACE":/path \
+                                -v "$WORKSPACE:/path" \
                                 zricethezav/gitleaks:latest detect \
                                 --source /path \
                                 --report-format json \
@@ -78,22 +82,23 @@ pipeline {
             }
         }
 
-        /* ===================== MAVEN BUILD ===================== */
-stage('Build Maven') {
-    steps {
-        sh '''
-            echo "=== MAVEN BUILD ==="
+        /* ===================== MAVEN BUILD (FIXED) ===================== */
+        stage('Build Maven') {
+            steps {
+                sh '''
+                    echo "=== MAVEN BUILD ==="
 
-            docker run --rm \
-                -v $WORKSPACE:/workspace \
-                -w /workspace \
-                maven:3.9.6-eclipse-temurin-17 \
-                mvn clean package -DskipTests -B
+                    docker run --rm \
+                        -v "$WORKSPACE:/app" \
+                        -v "$HOME/.m2:/root/.m2" \
+                        -w /app \
+                        maven:3.9.6-eclipse-temurin-17 \
+                        mvn clean package -DskipTests -B
 
-            ls -lh $WORKSPACE/target/*.jar || true
-        '''
-    }
-}
+                    ls -lh target/*.jar || true
+                '''
+            }
+        }
 
         /* ===================== OWASP ===================== */
         stage('OWASP') {
@@ -102,8 +107,8 @@ stage('Build Maven') {
                     mkdir -p reports
 
                     docker run --rm \
-                        -v "$WORKSPACE":/src \
-                        -v "$WORKSPACE/reports":/report \
+                        -v "$WORKSPACE:/src" \
+                        -v "$WORKSPACE/reports:/report" \
                         owasp/dependency-check:latest \
                         --scan /src \
                         --format HTML \
@@ -119,9 +124,7 @@ stage('Build Maven') {
         stage('Build Docker') {
             steps {
                 sh '''
-                    docker build \
-                        -t $IMAGE_FULL \
-                        -t $IMAGE_LATEST .
+                    docker build -t $IMAGE_FULL -t $IMAGE_LATEST .
 
                     docker images | grep foodfrenzy || true
                 '''
@@ -132,8 +135,6 @@ stage('Build Maven') {
         stage('Trivy') {
             steps {
                 sh '''
-                    mkdir -p reports
-
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         aquasec/trivy:latest image \
@@ -147,7 +148,7 @@ stage('Build Maven') {
             }
         }
 
-        /* ===================== HARBOR PUSH ===================== */
+        /* ===================== PUSH HARBOR ===================== */
         stage('Push Harbor') {
             steps {
                 sh '''
@@ -219,7 +220,10 @@ EOF
 
         failure {
             echo "PIPELINE FAILED"
-            sh 'docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true'
+
+            sh '''
+                docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true
+            '''
         }
 
         always {
