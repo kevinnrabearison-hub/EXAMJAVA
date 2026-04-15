@@ -6,7 +6,7 @@ pipeline {
         APP_NAME       = "foodfrenzy-app"
         HARBOR_HOST    = "localhost:8081"
         HARBOR_PROJECT = "foodfrenzy"
-
+        MAVEN_OPTS = "-Dmaven.repo.local=/root/.m2/repository"
         IMAGE_NAME     = "localhost:8081/foodfrenzy/foodfrenzy-app"
         IMAGE_TAG      = "${BUILD_NUMBER}"
         IMAGE_FULL     = "localhost:8081/foodfrenzy/foodfrenzy-app:${BUILD_NUMBER}"
