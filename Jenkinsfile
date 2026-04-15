@@ -82,19 +82,16 @@ pipeline {
         stage('Build Maven') {
             steps {
                 sh '''
-                    set -e
-
                     echo "=== MAVEN BUILD ==="
+                    test -f pom.xml || exit 1
 
                     docker run --rm \
-                        -u $(id -u):$(id -g) \
                         -v "$WORKSPACE":/app \
                         -v "$HOME/.m2":/root/.m2 \
                         -w /app \
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -DskipTests -B
 
-                    echo "=== CHECK JAR ==="
                     ls -lh target/*.jar
                 '''
             }
