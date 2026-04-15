@@ -79,24 +79,22 @@ pipeline {
         }
 
         /* ===================== MAVEN BUILD ===================== */
-        stage('Build Maven') {
-            steps {
-                sh '''
-                    echo "=== MAVEN BUILD ==="
-                    pwd
-                    ls -la /var/jenkins_home/workspace/FoodFrenzy-Pipeline
+stage('Build Maven') {
+    steps {
+        sh '''
+            echo "=== MAVEN BUILD ==="
 
-                    docker run --rm \
-                        -v /var/jenkins_home/workspace/FoodFrenzy-Pipeline:/app \
-                        -v /var/jenkins_home/.m2:/root/.m2 \
-                        -w /app \
-                        maven:3.9.6-eclipse-temurin-17 \
-                        mvn clean package -DskipTests -B
+            docker run --rm \
+                -v /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline:/app \
+                -v /var/lib/docker/volumes/jenkins_home/_data/.m2:/root/.m2 \
+                -w /app \
+                maven:3.9.6-eclipse-temurin-17 \
+                mvn clean package -DskipTests -B
 
-                    ls -lh /var/jenkins_home/workspace/FoodFrenzy-Pipeline/target/*.jar
-                '''
-            }
-        }
+            ls -lh /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline/target/*.jar
+        '''
+    }
+}
 
         /* ===================== OWASP ===================== */
         stage('OWASP') {
