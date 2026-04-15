@@ -85,13 +85,14 @@ stage('Build Maven') {
             echo "=== MAVEN BUILD ==="
 
             docker run --rm \
-                -v /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline:/app \
-                -v /var/lib/docker/volumes/jenkins_home/_data/.m2:/root/.m2 \
+                --user 1000:1000 \
+                -v $WORKSPACE:/app \
+                -v $HOME/.m2:/root/.m2 \
                 -w /app \
                 maven:3.9.6-eclipse-temurin-17 \
                 mvn clean package -DskipTests -B
 
-            ls -lh /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline/target/*.jar
+            ls -lh $WORKSPACE/target/*.jar || true
         '''
     }
 }
