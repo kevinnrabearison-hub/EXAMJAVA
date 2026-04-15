@@ -87,8 +87,9 @@ stage('Build Maven') {
             docker run --rm \
                 --user 1000:1000 \
                 -v $WORKSPACE:/app \
-                -v $HOME/.m2:/root/.m2 \
+                -v /var/jenkins_home/.m2:/home/jenkins/.m2 \
                 -w /app \
+                -e HOME=/home/jenkins \
                 maven:3.9.6-eclipse-temurin-17 \
                 mvn clean package -DskipTests -B
 
