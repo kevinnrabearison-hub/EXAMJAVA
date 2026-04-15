@@ -22,7 +22,6 @@ pipeline {
         timeout(time: 45, unit: 'MINUTES')
         timestamps()
         disableConcurrentBuilds()
-        skipDefaultCheckout(true)
     }
 
     stages {
@@ -30,10 +29,9 @@ pipeline {
         /* ===================== CLEAN + CHECKOUT ===================== */
         stage('Checkout') {
             steps {
-                echo "=== CLEAN + CHECKOUT ==="
-                cleanWs()
+                echo "=== CLEAN WORKSPACE + CHECKOUT ==="
+                deleteDir()
                 checkout scm
-
                 sh '''
                     git rev-parse --is-inside-work-tree
                     git log --oneline -3 || true
@@ -49,13 +47,14 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
-
                             docker run --rm \
                                 -v "$WORKSPACE":/src \
                                 -w /src \
                                 returntocorp/semgrep:latest \
                                 semgrep --config p/java \
                                 --json --output reports/semgrep.json src/ || true
+
+                            echo "Semgrep OK"
                         '''
                     }
                 }
@@ -64,14 +63,15 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
-
                             docker run --rm \
-                                -v "$WORKSPACE":/repo \
+                                -v "$WORKSPACE":/path \
                                 zricethezav/gitleaks:latest detect \
-                                --source /repo \
+                                --source /path \
                                 --report-format json \
-                                --report-path /repo/reports/gitleaks.json \
+                                --report-path /path/reports/gitleaks.json \
                                 --exit-code 0 || true
+
+                            echo "Gitleaks OK"
                         '''
                     }
                 }
@@ -79,25 +79,22 @@ pipeline {
         }
 
         /* ===================== MAVEN BUILD ===================== */
-        stage('Build Maven') {
-            steps {
-                sh '''
-                    echo "=== MAVEN BUILD ==="
+stage('Build Maven') {
+    steps {
+        sh '''
+            echo "=== MAVEN BUILD ==="
 
-                    docker run --rm \
-                        -u 1000:1000 \
-                        -v "$WORKSPACE":/app \
-                        -v "$HOME/.m2":/root/.m2 \
-                        -w /app \
-                        maven:3.9.6-eclipse-temurin-17 \
-                        mvn clean package -DskipTests -B
+            docker run --rm \
+                -v /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline:/app \
+                -v /var/lib/docker/volumes/jenkins_home/_data/.m2:/root/.m2 \
+                -w /app \
+                maven:3.9.6-eclipse-temurin-17 \
+                mvn clean package -DskipTests -B
 
-                    echo "=== CHECK JAR ==="
-                    ls -lh target/ || true
-                    ls -lh target/*.jar || true
-                '''
-            }
-        }
+            ls -lh /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline/target/*.jar
+        '''
+    }
+}
 
         /* ===================== OWASP ===================== */
         stage('OWASP') {
@@ -113,6 +110,8 @@ pipeline {
                         --format HTML \
                         --out /report \
                         --project FoodFrenzy || true
+
+                    echo "OWASP OK"
                 '''
             }
         }
@@ -134,6 +133,8 @@ pipeline {
         stage('Trivy') {
             steps {
                 sh '''
+                    mkdir -p reports
+
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         aquasec/trivy:latest image \
@@ -141,6 +142,8 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --format table \
                         $IMAGE_FULL || true
+
+                    echo "Trivy OK"
                 '''
             }
         }
@@ -166,6 +169,7 @@ pipeline {
                 sh '''
                     mkdir -p $DEPLOY_DIR
                     cp docker-compose.yml $DEPLOY_DIR/
+
                     cd $DEPLOY_DIR
 
                     if [ ! -f .env ]; then
@@ -208,6 +212,7 @@ EOF
         }
     }
 
+    /* ===================== POST ===================== */
     post {
         success {
             echo "PIPELINE SUCCESS - Build #${BUILD_NUMBER}"
