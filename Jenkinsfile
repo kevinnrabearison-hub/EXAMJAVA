@@ -83,16 +83,17 @@ pipeline {
             steps {
                 sh '''
                     echo "=== MAVEN BUILD ==="
-                    test -f pom.xml || exit 1
+                    pwd
+                    ls -la /var/jenkins_home/workspace/FoodFrenzy-Pipeline
 
                     docker run --rm \
-                        -v "$WORKSPACE":/app \
-                        -v "$HOME/.m2":/root/.m2 \
+                        -v /var/jenkins_home/workspace/FoodFrenzy-Pipeline:/app \
+                        -v /var/jenkins_home/.m2:/root/.m2 \
                         -w /app \
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -DskipTests -B
 
-                    ls -lh target/*.jar
+                    ls -lh /var/jenkins_home/workspace/FoodFrenzy-Pipeline/target/*.jar
                 '''
             }
         }
