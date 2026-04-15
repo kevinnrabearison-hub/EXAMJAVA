@@ -85,13 +85,10 @@ stage('Build Maven') {
             echo "=== MAVEN BUILD ==="
 
             docker run --rm \
-                --user 1000:1000 \
-                -v $WORKSPACE:/app \
-                -v /var/jenkins_home/.m2:/home/jenkins/.m2 \
-                -w /app \
-                -e HOME=/home/jenkins \
+                -v $WORKSPACE:/workspace \
+                -w /workspace \
                 maven:3.9.6-eclipse-temurin-17 \
-                mvn clean package -DskipTests -B -Duser.home=/home/jenkins
+                mvn clean package -DskipTests -B
 
             ls -lh $WORKSPACE/target/*.jar || true
         '''
