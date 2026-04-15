@@ -91,11 +91,11 @@ stage('Build Maven') {
                 maven:3.9.6-eclipse-temurin-17 \
                 mvn clean package -DskipTests -B
 
-            ls -lh /var/lib/docker/volumes/jenkins_home/_data/workspace/FoodFrenzy-Pipeline/target/*.jar
+            echo "=== CHECK JAR ==="
+            ls -lh target/*.jar
         '''
     }
 }
-
         /* ===================== OWASP ===================== */
         stage('OWASP') {
             steps {
