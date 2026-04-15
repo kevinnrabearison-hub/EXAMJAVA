@@ -41,6 +41,25 @@ pipeline {
             }
         }
 
+        /* ===================== RESOLVE HOST WORKSPACE ===================== */
+        stage('Resolve Host Workspace') {
+            steps {
+                script {
+                    // Récupère le vrai chemin du workspace sur l'hôte Docker
+                    // en inspectant le volume monté dans le conteneur Jenkins
+                    env.HOST_WORKSPACE = sh(
+                        script: '''
+                            docker inspect jenkins \
+                                --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Source}}{{end}}{{end}}'
+                        ''',
+                        returnStdout: true
+                    ).trim() + "/workspace/FoodFrenzy-Pipeline"
+
+                    echo "HOST_WORKSPACE resolved: ${env.HOST_WORKSPACE}"
+                }
+            }
+        }
+
         /* ===================== SAST ===================== */
         stage('SAST') {
             parallel {
@@ -51,7 +70,7 @@ pipeline {
                             mkdir -p reports
 
                             docker run --rm \
-                                -v "$WORKSPACE:/src" \
+                                -v "$HOST_WORKSPACE:/src" \
                                 -w /src \
                                 returntocorp/semgrep:latest \
                                 semgrep --config p/java \
@@ -68,7 +87,7 @@ pipeline {
                             mkdir -p reports
 
                             docker run --rm \
-                                -v "$WORKSPACE:/path" \
+                                -v "$HOST_WORKSPACE:/path" \
                                 zricethezav/gitleaks:latest detect \
                                 --source /path \
                                 --report-format json \
@@ -82,15 +101,16 @@ pipeline {
             }
         }
 
-        /* ===================== MAVEN BUILD (FIXED) ===================== */
+        /* ===================== MAVEN BUILD ===================== */
         stage('Build Maven') {
             steps {
                 sh '''
                     echo "=== MAVEN BUILD ==="
+                    echo "Mounting HOST_WORKSPACE: $HOST_WORKSPACE"
 
                     docker run --rm \
-                        -v "$WORKSPACE:/app" \
-                        -v "$HOME/.m2:/root/.m2" \
+                        -v "$HOST_WORKSPACE:/app" \
+                        -v "$HOST_WORKSPACE/.m2:/root/.m2" \
                         -w /app \
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -DskipTests -B
@@ -107,8 +127,8 @@ pipeline {
                     mkdir -p reports
 
                     docker run --rm \
-                        -v "$WORKSPACE:/src" \
-                        -v "$WORKSPACE/reports:/report" \
+                        -v "$HOST_WORKSPACE:/src" \
+                        -v "$HOST_WORKSPACE/reports:/report" \
                         owasp/dependency-check:latest \
                         --scan /src \
                         --format HTML \
@@ -125,7 +145,6 @@ pipeline {
             steps {
                 sh '''
                     docker build -t $IMAGE_FULL -t $IMAGE_LATEST .
-
                     docker images | grep foodfrenzy || true
                 '''
             }
@@ -220,7 +239,6 @@ EOF
 
         failure {
             echo "PIPELINE FAILED"
-
             sh '''
                 docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true
             '''
@@ -228,7 +246,6 @@ EOF
 
         always {
             archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
-
             sh '''
                 docker rmi $IMAGE_FULL || true
                 docker image prune -f || true
