@@ -91,7 +91,7 @@ stage('Build Maven') {
                 -w /app \
                 -e HOME=/home/jenkins \
                 maven:3.9.6-eclipse-temurin-17 \
-                mvn clean package -DskipTests -B
+                mvn clean package -DskipTests -B -Duser.home=/home/jenkins
 
             ls -lh $WORKSPACE/target/*.jar || true
         '''
