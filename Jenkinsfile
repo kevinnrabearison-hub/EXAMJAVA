@@ -6,7 +6,7 @@ pipeline {
         APP_NAME       = "foodfrenzy-app"
         HARBOR_HOST    = "localhost:8081"
         HARBOR_PROJECT = "foodfrenzy"
-        MAVEN_OPTS = "-Dmaven.repo.local=/root/.m2/repository"
+
         IMAGE_NAME     = "localhost:8081/foodfrenzy/foodfrenzy-app"
         IMAGE_TAG      = "${BUILD_NUMBER}"
         IMAGE_FULL     = "localhost:8081/foodfrenzy/foodfrenzy-app:${BUILD_NUMBER}"
@@ -22,6 +22,7 @@ pipeline {
         timeout(time: 45, unit: 'MINUTES')
         timestamps()
         disableConcurrentBuilds()
+        skipDefaultCheckout(true)
     }
 
     stages {
@@ -29,9 +30,10 @@ pipeline {
         /* ===================== CLEAN + CHECKOUT ===================== */
         stage('Checkout') {
             steps {
-                echo "=== CLEAN WORKSPACE + CHECKOUT ==="
-                deleteDir()
+                echo "=== CLEAN + CHECKOUT ==="
+                cleanWs()
                 checkout scm
+
                 sh '''
                     git rev-parse --is-inside-work-tree
                     git log --oneline -3 || true
@@ -47,14 +49,13 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
+
                             docker run --rm \
                                 -v "$WORKSPACE":/src \
                                 -w /src \
                                 returntocorp/semgrep:latest \
                                 semgrep --config p/java \
                                 --json --output reports/semgrep.json src/ || true
-
-                            echo "Semgrep OK"
                         '''
                     }
                 }
@@ -63,15 +64,14 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
-                            docker run --rm \
-                                -v "$WORKSPACE":/path \
-                                zricethezav/gitleaks:latest detect \
-                                --source /path \
-                                --report-format json \
-                                --report-path /path/reports/gitleaks.json \
-                                --exit-code 0 || true
 
-                            echo "Gitleaks OK"
+                            docker run --rm \
+                                -v "$WORKSPACE":/repo \
+                                zricethezav/gitleaks:latest detect \
+                                --source /repo \
+                                --report-format json \
+                                --report-path /repo/reports/gitleaks.json \
+                                --exit-code 0 || true
                         '''
                     }
                 }
@@ -79,24 +79,26 @@ pipeline {
         }
 
         /* ===================== MAVEN BUILD ===================== */
-stage('Build Maven') {
-    steps {
-        sh '''
-            echo "=== MAVEN BUILD ==="
+        stage('Build Maven') {
+            steps {
+                sh '''
+                    echo "=== MAVEN BUILD ==="
 
-            docker run --rm \
-                -u 1000:1000 \
-                -v "$WORKSPACE":/app \
-                -v "$HOME/.m2":/root/.m2 \
-                -w /app \
-                maven:3.9.6-eclipse-temurin-17 \
-                mvn clean package -DskipTests -B
+                    docker run --rm \
+                        -u 1000:1000 \
+                        -v "$WORKSPACE":/app \
+                        -v "$HOME/.m2":/root/.m2 \
+                        -w /app \
+                        maven:3.9.6-eclipse-temurin-17 \
+                        mvn clean package -DskipTests -B
 
-            echo "=== CHECK JAR ==="
-            ls -lh target/*.jar
-        '''
-    }
-}
+                    echo "=== CHECK JAR ==="
+                    ls -lh target/ || true
+                    ls -lh target/*.jar || true
+                '''
+            }
+        }
+
         /* ===================== OWASP ===================== */
         stage('OWASP') {
             steps {
@@ -111,8 +113,6 @@ stage('Build Maven') {
                         --format HTML \
                         --out /report \
                         --project FoodFrenzy || true
-
-                    echo "OWASP OK"
                 '''
             }
         }
@@ -134,8 +134,6 @@ stage('Build Maven') {
         stage('Trivy') {
             steps {
                 sh '''
-                    mkdir -p reports
-
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         aquasec/trivy:latest image \
@@ -143,8 +141,6 @@ stage('Build Maven') {
                         --severity HIGH,CRITICAL \
                         --format table \
                         $IMAGE_FULL || true
-
-                    echo "Trivy OK"
                 '''
             }
         }
@@ -170,7 +166,6 @@ stage('Build Maven') {
                 sh '''
                     mkdir -p $DEPLOY_DIR
                     cp docker-compose.yml $DEPLOY_DIR/
-
                     cd $DEPLOY_DIR
 
                     if [ ! -f .env ]; then
@@ -213,7 +208,6 @@ EOF
         }
     }
 
-    /* ===================== POST ===================== */
     post {
         success {
             echo "PIPELINE SUCCESS - Build #${BUILD_NUMBER}"
