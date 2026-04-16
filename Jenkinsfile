@@ -127,14 +127,18 @@ stage('OWASP') {
             mkdir -p reports
 
             docker run --rm \
-                -v "$HOST_WORKSPACE:/src" \
-                aquasec/trivy:latest fs \
-                --severity MEDIUM,HIGH,CRITICAL \
-                --format table \
-                --output /src/reports/owasp-report.html \
-                /src || true
+                -u $(id -u):$(id -g) \
+                -v "$WORKSPACE:/src" \
+                -v "$WORKSPACE/reports:/report" \
+                -v owasp-data:/usr/share/dependency-check/data \
+                owasp/dependency-check:latest \
+                --scan /src \
+                --format HTML \
+                --out /report \
+                --project FoodFrenzy \
+                --noupdate || true
 
-            echo "OWASP (Trivy) OK"
+            echo "OWASP OK"
         '''
     }
 }
