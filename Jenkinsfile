@@ -186,18 +186,13 @@ stage('Deploy') {
 
             echo "Deploying to $DEPLOY_DIR"
 
-            # --- sécurité: répertoire stable ---
-            sudo mkdir -p "$DEPLOY_DIR" || mkdir -p "$DEPLOY_DIR"
+            # --- SAFE DIRECTORY ---
+            mkdir -p "$DEPLOY_DIR"
 
-            # éviter problèmes ownership Jenkins
-            sudo chown -R $(id -u):$(id -g) "$DEPLOY_DIR" 2>/dev/null || true
-
-            # --- copy compose ---
             cp docker-compose.yml "$DEPLOY_DIR/"
-
             cd "$DEPLOY_DIR"
 
-            # --- .env idempotent ---
+            # --- ENV FILE SAFE ---
             cat > .env <<EOF
 MYSQL_ROOT_PASSWORD=kevin
 DB_USER=foodfrenzy_user
@@ -211,17 +206,21 @@ EOF
 
             echo "Stopping previous stack..."
 
-            # --- COMPATIBILITÉ DOCKER COMPOSE ---
+            # --- DOCKER COMPOSE COMPATIBILITY LAYER ---
             if docker compose version >/dev/null 2>&1; then
-                docker compose down --remove-orphans || true
+                echo "Using docker compose v2"
+                docker compose down || true
                 docker compose up -d --pull always
                 docker compose ps
+
             elif command -v docker-compose >/dev/null 2>&1; then
+                echo "Using docker-compose v1"
                 docker-compose down || true
                 docker-compose up -d
                 docker-compose ps
+
             else
-                echo "ERROR: No docker compose installed"
+                echo "ERROR: No Docker Compose available in Jenkins container"
                 exit 1
             fi
         '''
