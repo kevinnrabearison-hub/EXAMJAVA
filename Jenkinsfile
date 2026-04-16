@@ -186,13 +186,14 @@ stage('Deploy') {
 
             echo "Deploying to $DEPLOY_DIR"
 
-            # --- SAFE DIRECTORY ---
+            # --- CREATE DIR SAFE ---
             mkdir -p "$DEPLOY_DIR"
 
+            # --- COPY COMPOSE FILE ---
             cp docker-compose.yml "$DEPLOY_DIR/"
             cd "$DEPLOY_DIR"
 
-            # --- ENV FILE SAFE ---
+            # --- ENV FILE (idempotent) ---
             cat > .env <<EOF
 MYSQL_ROOT_PASSWORD=kevin
 DB_USER=foodfrenzy_user
@@ -206,15 +207,17 @@ EOF
 
             echo "Stopping previous stack..."
 
-            # --- DOCKER COMPOSE COMPATIBILITY LAYER ---
+            # --- SAFE DOCKER COMPOSE HANDLING ---
             if docker compose version >/dev/null 2>&1; then
                 echo "Using docker compose v2"
-                docker compose down || true
+
+                docker compose down --remove-orphans || true
                 docker compose up -d --pull always
                 docker compose ps
 
             elif command -v docker-compose >/dev/null 2>&1; then
                 echo "Using docker-compose v1"
+
                 docker-compose down || true
                 docker-compose up -d
                 docker-compose ps
