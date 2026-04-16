@@ -129,21 +129,13 @@ pipeline {
 
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/src" \
-                        -v "$HOST_WORKSPACE/reports:/report" \
-                        owasp/dependency-check:latest \
-                        --scan /src \
-                        --format HTML \
-                        --out /report \
-                        --project FoodFrenzy \
-                        --noupdate \
-                        --disableOssIndex \
-                        --disableRetireJS \
-                        --disableNodeAudit \
-                        --disablePyPkg \
-                        --disablePyDist \
-                        --disableAutoUpdate || true
+                        aquasec/trivy:latest fs \
+                        --severity MEDIUM,HIGH,CRITICAL \
+                        --format table \
+                        --output /src/reports/owasp-report.html \
+                        /src || true
 
-                    echo "OWASP OK"
+                    echo "OWASP (Trivy) OK"
                 '''
             }
         }
