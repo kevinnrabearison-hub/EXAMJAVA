@@ -2,6 +2,15 @@ pipeline {
 
     agent any
 
+    // FIX: désactive le checkout automatique qui bloque sur .m2 root
+    options {
+        skipDefaultCheckout(true)
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 45, unit: 'MINUTES')
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
     environment {
         APP_NAME       = "foodfrenzy-app"
         HARBOR_HOST    = "localhost:8081"
@@ -17,22 +26,15 @@ pipeline {
         HARBOR_CREDS   = credentials('harbor-credentials')
     }
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 45, unit: 'MINUTES')
-        timestamps()
-        disableConcurrentBuilds()
-    }
-
     stages {
 
         /* ===================== CHECKOUT ===================== */
         stage('Checkout') {
             steps {
-                echo "=== CLEAN + CHECKOUT ==="
+                echo "=== FIX PERMISSIONS + CLEAN + CHECKOUT ==="
 
-                // FIX: remet les permissions avant deleteDir pour éviter
-                // "Operation not permitted" sur les fichiers créés par root (Docker)
+                // FIX 1: remet les permissions AVANT deleteDir()
+                // Les fichiers .m2 créés par Docker (root) bloquaient Jenkins
                 sh '''
                     docker run --rm \
                         -v "$WORKSPACE:/workspace" \
@@ -75,14 +77,12 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
-
                             docker run --rm \
                                 -v "$HOST_WORKSPACE:/src" \
                                 -w /src \
                                 returntocorp/semgrep:latest \
                                 semgrep --config p/java \
                                 --json --output reports/semgrep.json src/ || true
-
                             echo "Semgrep OK"
                         '''
                     }
@@ -92,7 +92,6 @@ pipeline {
                     steps {
                         sh '''
                             mkdir -p reports
-
                             docker run --rm \
                                 -v "$HOST_WORKSPACE:/path" \
                                 zricethezav/gitleaks:latest detect \
@@ -100,7 +99,6 @@ pipeline {
                                 --report-format json \
                                 --report-path /path/reports/gitleaks.json \
                                 --exit-code 0 || true
-
                             echo "Gitleaks OK"
                         '''
                     }
@@ -114,7 +112,7 @@ pipeline {
                 sh '''
                     echo "=== MAVEN BUILD ==="
 
-                    # FIX: volume Docker nommé pour .m2 → plus jamais dans le workspace
+                    # FIX: volume Docker nommé → .m2 jamais dans le workspace
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/app" \
                         -v "maven-repo:/root/.m2" \
@@ -132,7 +130,6 @@ pipeline {
             steps {
                 sh '''
                     mkdir -p reports
-
                     docker run --rm \
                         -u $(id -u):$(id -g) \
                         -v "$HOST_WORKSPACE:/src" \
@@ -144,7 +141,6 @@ pipeline {
                         --out /report \
                         --project FoodFrenzy \
                         --noupdate || true
-
                     echo "OWASP OK"
                 '''
             }
@@ -171,7 +167,6 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --format table \
                         $IMAGE_FULL || true
-
                     echo "Trivy OK"
                 '''
             }
@@ -183,10 +178,8 @@ pipeline {
                 sh '''
                     echo "$HARBOR_CREDS_PSW" | docker login $HARBOR_HOST \
                         -u "$HARBOR_CREDS_USR" --password-stdin
-
                     docker push $IMAGE_FULL
                     docker push $IMAGE_LATEST
-
                     docker logout $HARBOR_HOST
                 '''
             }
@@ -198,7 +191,6 @@ pipeline {
                 sh '''
                     mkdir -p $DEPLOY_DIR
                     cp docker-compose.yml $DEPLOY_DIR/
-
                     cd $DEPLOY_DIR
 
                     if [ ! -f .env ]; then
@@ -227,13 +219,11 @@ EOF
             steps {
                 sh '''
                     echo "Waiting Spring Boot..."
-
                     for i in $(seq 1 15); do
                         curl -sf http://localhost:8090/actuator/health && exit 0
                         echo "Try $i/15"
                         sleep 10
                     done
-
                     echo "FAILED HEALTH CHECK"
                     exit 1
                 '''
@@ -247,12 +237,13 @@ EOF
             echo "PIPELINE SUCCESS - Build #${BUILD_NUMBER}"
         }
 
-        // FIX: node() explicite pour que sh et archiveArtifacts aient un contexte
         failure {
             node('') {
                 echo "PIPELINE FAILED"
+                // FIX 3: DEPLOY_DIR hardcodé car les env vars peuvent être vides ici
                 sh '''
-                    docker compose -f ${DEPLOY_DIR}/docker-compose.yml logs --tail=30 || true
+                    docker compose -f /home/khevin/foodfrenzy-deploy/docker-compose.yml \
+                        logs --tail=30 || true
                 '''
             }
         }
@@ -260,10 +251,13 @@ EOF
         always {
             node('') {
                 archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
-                sh '''
-                    docker rmi $IMAGE_FULL || true
+
+                // FIX 2: construction explicite du tag pour éviter variable vide
+                sh """
+                    IMAGE="localhost:8081/foodfrenzy/foodfrenzy-app:${BUILD_NUMBER}"
+                    docker rmi "\$IMAGE" || true
                     docker image prune -f || true
-                '''
+                """
             }
         }
     }
