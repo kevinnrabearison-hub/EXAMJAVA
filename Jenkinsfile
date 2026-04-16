@@ -12,7 +12,7 @@ pipeline {
         IMAGE_FULL     = "localhost:8081/foodfrenzy/foodfrenzy-app:${BUILD_NUMBER}"
         IMAGE_LATEST   = "localhost:8081/foodfrenzy/foodfrenzy-app:latest"
 
-        DEPLOY_DIR     = "/home/khevin/foodfrenzy-deploy"
+        DEPLOY_DIR = "/opt/foodfrenzy-deploy"
 
         HARBOR_CREDS   = credentials('harbor-credentials')
     }
@@ -177,16 +177,23 @@ pipeline {
         }
 
         /* ===================== DEPLOY ===================== */
-        stage('Deploy') {
-            steps {
-                sh '''
-                    mkdir -p $DEPLOY_DIR
-                    cp docker-compose.yml $DEPLOY_DIR/
+stage('Deploy') {
+    steps {
+        sh '''
+            set -e
 
-                    cd $DEPLOY_DIR
+            echo "Deploying to $DEPLOY_DIR"
 
-                    if [ ! -f .env ]; then
-                        cat > .env <<EOF
+            # Sécurité: création répertoire avec fallback
+            mkdir -p $DEPLOY_DIR
+
+            # Copie compose
+            cp docker-compose.yml $DEPLOY_DIR/
+
+            cd $DEPLOY_DIR
+
+            # Gestion .env propre
+            cat > .env <<EOF
 MYSQL_ROOT_PASSWORD=kevin
 DB_USER=foodfrenzy_user
 DB_PASSWORD=kevin123
@@ -196,16 +203,14 @@ HARBOR_USER=admin
 HARBOR_PASSWORD=Harbor12345
 IMAGE_TAG=$BUILD_NUMBER
 EOF
-                    else
-                        sed -i "s/IMAGE_TAG=.*/IMAGE_TAG=$BUILD_NUMBER/" .env
-                    fi
 
-                    docker compose down || true
-                    docker compose up -d --pull always
-                    docker compose ps
-                '''
-            }
-        }
+            # Restart propre stack
+            docker compose down --remove-orphans || true
+            docker compose up -d --pull always
+            docker compose ps
+        '''
+    }
+}
 
         /* ===================== HEALTH CHECK ===================== */
         stage('Health Check') {
