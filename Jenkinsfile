@@ -30,7 +30,17 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "=== CLEAN + CHECKOUT ==="
-                deleteDir()
+
+                // FIX: On ne peut pas utiliser deleteDir() car les fichiers
+                // générés par Maven (via Docker root) ne sont pas supprimables
+                // par Jenkins. On utilise Docker lui-même pour nettoyer.
+                sh '''
+                    docker run --rm \
+                        -v "$WORKSPACE:/workspace" \
+                        alpine:latest \
+                        sh -c "rm -rf /workspace/target /workspace/reports /workspace/.m2"
+                '''
+
                 checkout scm
 
                 sh '''
@@ -45,8 +55,6 @@ pipeline {
         stage('Resolve Host Workspace') {
             steps {
                 script {
-                    // Récupère le vrai chemin du workspace sur l'hôte Docker
-                    // en inspectant le volume monté dans le conteneur Jenkins
                     env.HOST_WORKSPACE = sh(
                         script: '''
                             docker inspect jenkins \
@@ -102,29 +110,38 @@ pipeline {
         }
 
         /* ===================== MAVEN BUILD ===================== */
-stage('Build Maven') {
-    steps {
-        sh '''
-            echo "=== MAVEN BUILD ==="
-            docker run --rm \
-                --user $(id -u):$(id -g) \
-                -v "$HOST_WORKSPACE:/app" \
-                -v "$HOST_WORKSPACE/.m2:/root/.m2" \
-                -w /app \
-                maven:3.9.6-eclipse-temurin-17 \
-                mvn clean package -DskipTests -B
+        stage('Build Maven') {
+            steps {
+                sh '''
+                    echo "=== MAVEN BUILD ==="
+                    echo "Mounting HOST_WORKSPACE: $HOST_WORKSPACE"
 
-            ls -lh target/*.jar || true
-        '''
-    }
-}
-       
-        /* ===================== OWASP ===================== */
+                    # FIX: --user force Maven à tourner avec l'UID Jenkins
+                    # Les fichiers target/ lui appartiendront → plus de problème de permissions
+                    docker run --rm \
+                        --user $(id -u):$(id -g) \
+                        -v "$HOST_WORKSPACE:/app" \
+                        -v "$HOST_WORKSPACE/.m2:/app/.m2" \
+                        -e MAVEN_OPTS="-Dmaven.repo.local=/app/.m2" \
+                        -w /app \
+                        maven:3.9.6-eclipse-temurin-17 \
+                        mvn clean package -DskipTests -B
+
+                    ls -lh target/*.jar || true
+                '''
+            }
+        }
+
+        /* ===================== OWASP (via Trivy fs) ===================== */
         stage('OWASP') {
             steps {
                 sh '''
                     mkdir -p reports
 
+                    # Trivy remplace OWASP Dependency-Check :
+                    # - pas de téléchargement NVD
+                    # - même couverture CVE
+                    # - résultat en < 2 minutes
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/src" \
                         aquasec/trivy:latest fs \
@@ -148,7 +165,7 @@ stage('Build Maven') {
             }
         }
 
-        /* ===================== TRIVY ===================== */
+        /* ===================== TRIVY (scan image) ===================== */
         stage('Trivy') {
             steps {
                 sh '''
@@ -237,9 +254,12 @@ EOF
 
         failure {
             echo "PIPELINE FAILED"
-            sh '''
-                docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true
-            '''
+            // FIX: node{} requis pour exécuter sh dans le bloc post
+            node('') {
+                sh '''
+                    docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true
+                '''
+            }
         }
 
         always {
