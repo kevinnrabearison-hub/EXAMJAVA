@@ -180,19 +180,24 @@ pipeline {
 stage('Deploy') {
     steps {
         sh '''
-            set -e
+            set -euo pipefail
+
+            DEPLOY_DIR="/opt/foodfrenzy-deploy"
 
             echo "Deploying to $DEPLOY_DIR"
 
-            # Sécurité: création répertoire avec fallback
-            mkdir -p $DEPLOY_DIR
+            # --- sécurité: répertoire stable ---
+            sudo mkdir -p "$DEPLOY_DIR" || mkdir -p "$DEPLOY_DIR"
 
-            # Copie compose
-            cp docker-compose.yml $DEPLOY_DIR/
+            # éviter problèmes ownership Jenkins
+            sudo chown -R $(id -u):$(id -g) "$DEPLOY_DIR" 2>/dev/null || true
 
-            cd $DEPLOY_DIR
+            # --- copy compose ---
+            cp docker-compose.yml "$DEPLOY_DIR/"
 
-            # Gestion .env propre
+            cd "$DEPLOY_DIR"
+
+            # --- .env idempotent ---
             cat > .env <<EOF
 MYSQL_ROOT_PASSWORD=kevin
 DB_USER=foodfrenzy_user
@@ -201,13 +206,24 @@ DB_NAME=foodfrenzy_db
 HARBOR_HOST=localhost:8081
 HARBOR_USER=admin
 HARBOR_PASSWORD=Harbor12345
-IMAGE_TAG=$BUILD_NUMBER
+IMAGE_TAG=${BUILD_NUMBER}
 EOF
 
-            # Restart propre stack
-            docker compose down --remove-orphans || true
-            docker compose up -d --pull always
-            docker compose ps
+            echo "Stopping previous stack..."
+
+            # --- COMPATIBILITÉ DOCKER COMPOSE ---
+            if docker compose version >/dev/null 2>&1; then
+                docker compose down --remove-orphans || true
+                docker compose up -d --pull always
+                docker compose ps
+            elif command -v docker-compose >/dev/null 2>&1; then
+                docker-compose down || true
+                docker-compose up -d
+                docker-compose ps
+            else
+                echo "ERROR: No docker compose installed"
+                exit 1
+            fi
         '''
     }
 }
