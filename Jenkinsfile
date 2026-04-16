@@ -187,9 +187,10 @@ pipeline {
 
                     if [ ! -f .env ]; then
                         cat > .env <<EOF
-MYSQL_ROOT_PASSWORD=RootP@ssw0rd!
+MYSQL_ROOT_PASSWORD=kevin
 DB_USER=foodfrenzy_user
-DB_PASSWORD=FoodP@ssw0rd!
+DB_PASSWORD=kevin123
+DB_NAME=foodfrenzy_db
 HARBOR_HOST=localhost:8081
 HARBOR_USER=admin
 HARBOR_PASSWORD=Harbor12345
