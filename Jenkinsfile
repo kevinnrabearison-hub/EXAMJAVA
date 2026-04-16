@@ -30,6 +30,15 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "=== CLEAN + CHECKOUT ==="
+
+                // FIX: remet les permissions avant deleteDir pour éviter
+                // "Operation not permitted" sur les fichiers créés par root (Docker)
+                sh '''
+                    docker run --rm \
+                        -v "$WORKSPACE:/workspace" \
+                        alpine sh -c "chmod -R 777 /workspace 2>/dev/null || true"
+                '''
+
                 deleteDir()
                 checkout scm
 
@@ -45,8 +54,6 @@ pipeline {
         stage('Resolve Host Workspace') {
             steps {
                 script {
-                    // Récupère le vrai chemin du workspace sur l'hôte Docker
-                    // en inspectant le volume monté dans le conteneur Jenkins
                     env.HOST_WORKSPACE = sh(
                         script: '''
                             docker inspect jenkins \
@@ -106,11 +113,11 @@ pipeline {
             steps {
                 sh '''
                     echo "=== MAVEN BUILD ==="
-                    echo "Mounting HOST_WORKSPACE: $HOST_WORKSPACE"
 
+                    # FIX: volume Docker nommé pour .m2 → plus jamais dans le workspace
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/app" \
-                        -v "$HOST_WORKSPACE/.m2:/root/.m2" \
+                        -v "maven-repo:/root/.m2" \
                         -w /app \
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -DskipTests -B
@@ -121,27 +128,27 @@ pipeline {
         }
 
         /* ===================== OWASP ===================== */
-stage('OWASP') {
-    steps {
-        sh '''
-            mkdir -p reports
+        stage('OWASP') {
+            steps {
+                sh '''
+                    mkdir -p reports
 
-            docker run --rm \
-                -u $(id -u):$(id -g) \
-                -v "$WORKSPACE:/src" \
-                -v "$WORKSPACE/reports:/report" \
-                -v owasp-data:/usr/share/dependency-check/data \
-                owasp/dependency-check:latest \
-                --scan /src \
-                --format HTML \
-                --out /report \
-                --project FoodFrenzy \
-                --noupdate || true
+                    docker run --rm \
+                        -u $(id -u):$(id -g) \
+                        -v "$HOST_WORKSPACE:/src" \
+                        -v "$HOST_WORKSPACE/reports:/report" \
+                        -v owasp-data:/usr/share/dependency-check/data \
+                        owasp/dependency-check:latest \
+                        --scan /src \
+                        --format HTML \
+                        --out /report \
+                        --project FoodFrenzy \
+                        --noupdate || true
 
-            echo "OWASP OK"
-        '''
-    }
-}
+                    echo "OWASP OK"
+                '''
+            }
+        }
 
         /* ===================== DOCKER BUILD ===================== */
         stage('Build Docker') {
@@ -240,19 +247,24 @@ EOF
             echo "PIPELINE SUCCESS - Build #${BUILD_NUMBER}"
         }
 
+        // FIX: node() explicite pour que sh et archiveArtifacts aient un contexte
         failure {
-            echo "PIPELINE FAILED"
-            sh '''
-                docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true
-            '''
+            node('') {
+                echo "PIPELINE FAILED"
+                sh '''
+                    docker compose -f ${DEPLOY_DIR}/docker-compose.yml logs --tail=30 || true
+                '''
+            }
         }
 
         always {
-            archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
-            sh '''
-                docker rmi $IMAGE_FULL || true
-                docker image prune -f || true
-            '''
+            node('') {
+                archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+                sh '''
+                    docker rmi $IMAGE_FULL || true
+                    docker image prune -f || true
+                '''
+            }
         }
     }
 }
