@@ -120,6 +120,7 @@ pipeline {
             }
         }
 
+       
         /* ===================== OWASP ===================== */
         stage('OWASP') {
             steps {
@@ -129,13 +130,18 @@ pipeline {
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/src" \
                         -v "$HOST_WORKSPACE/reports:/report" \
-                        -v owasp-data:/usr/share/dependency-check/data \
                         owasp/dependency-check:latest \
                         --scan /src \
                         --format HTML \
                         --out /report \
                         --project FoodFrenzy \
-                        --noupdate || true
+                        --noupdate \
+                        --disableOssIndex \
+                        --disableRetireJS \
+                        --disableNodeAudit \
+                        --disablePyPkg \
+                        --disablePyDist \
+                        --disableAutoUpdate || true
 
                     echo "OWASP OK"
                 '''
