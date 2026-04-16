@@ -102,24 +102,22 @@ pipeline {
         }
 
         /* ===================== MAVEN BUILD ===================== */
-        stage('Build Maven') {
-            steps {
-                sh '''
-                    echo "=== MAVEN BUILD ==="
-                    echo "Mounting HOST_WORKSPACE: $HOST_WORKSPACE"
+stage('Build Maven') {
+    steps {
+        sh '''
+            echo "=== MAVEN BUILD ==="
+            docker run --rm \
+                --user $(id -u):$(id -g) \
+                -v "$HOST_WORKSPACE:/app" \
+                -v "$HOST_WORKSPACE/.m2:/root/.m2" \
+                -w /app \
+                maven:3.9.6-eclipse-temurin-17 \
+                mvn clean package -DskipTests -B
 
-                    docker run --rm \
-                        -v "$HOST_WORKSPACE:/app" \
-                        -v "$HOST_WORKSPACE/.m2:/root/.m2" \
-                        -w /app \
-                        maven:3.9.6-eclipse-temurin-17 \
-                        mvn clean package -DskipTests -B
-
-                    ls -lh target/*.jar || true
-                '''
-            }
-        }
-
+            ls -lh target/*.jar || true
+        '''
+    }
+}
        
         /* ===================== OWASP ===================== */
         stage('OWASP') {
