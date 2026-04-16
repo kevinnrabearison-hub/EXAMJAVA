@@ -113,25 +113,7 @@ pipeline {
             }
         }
 
-        /* ===================== OWASP ===================== */
-        stage('OWASP') {
-            steps {
-                sh '''
-                    mkdir -p reports
 
-                    docker run --rm \
-                        -v "$HOST_WORKSPACE:/src" \
-                        -v "$HOST_WORKSPACE/reports:/report" \
-                        owasp/dependency-check:latest \
-                        --scan /src \
-                        --format HTML \
-                        --out /report \
-                        --project FoodFrenzy || true
-
-                    echo "OWASP OK"
-                '''
-            }
-        }
 
         /* ===================== DOCKER BUILD ===================== */
         stage('Build Docker') {
@@ -156,6 +138,25 @@ pipeline {
                         $IMAGE_FULL || true
 
                     echo "Trivy OK"
+                '''
+            }
+        }
+                /* ===================== OWASP ===================== */
+        stage('OWASP') {
+            steps {
+                sh '''
+                    mkdir -p reports
+
+                    docker run --rm \
+                        -v "$HOST_WORKSPACE:/src" \
+                        -v "$HOST_WORKSPACE/reports:/report" \
+                        owasp/dependency-check:latest \
+                        --scan /src \
+                        --format HTML \
+                        --out /report \
+                        --project FoodFrenzy || true
+
+                    echo "OWASP OK"
                 '''
             }
         }
