@@ -14,6 +14,10 @@ docker run --rm \
     -v "$HOST_WS:/work" \
     -w /work \
     gcr.io/projectsigstore/cosign:v2.2.3 \
-    verify --key cosign.pub --insecure-ignore-tlog "$IMAGE_FULL"
+    verify --key cosign.pub \
+    --insecure-ignore-tlog \
+    --registry-username="$HARBOR_USER" \
+    --registry-password="$HARBOR_PASSWORD" \
+    "$IMAGE_FULL"
 
 echo "Signature verified. Image is authentic."

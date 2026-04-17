@@ -10,12 +10,21 @@ HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 echo "Signing image: $IMAGE_FULL"
 echo "Host workspace: $HOST_WS"
 
+# Login Harbor depuis le conteneur cosign
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
+    -v /root/.docker:/root/.docker \
     -w /work \
     -e COSIGN_PASSWORD="$COSIGN_PASSWORD" \
+    -e REGISTRY_USERNAME="$HARBOR_USER" \
+    -e REGISTRY_PASSWORD="$HARBOR_PASSWORD" \
     gcr.io/projectsigstore/cosign:v2.2.3 \
-    sign --key cosign.key --tlog-upload=false --yes "$IMAGE_FULL"
+    sign --key cosign.key \
+    --tlog-upload=false \
+    --yes \
+    --registry-username="$HARBOR_USER" \
+    --registry-password="$HARBOR_PASSWORD" \
+    "$IMAGE_FULL"
 
 echo "Image signed successfully."
