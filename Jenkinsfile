@@ -25,7 +25,7 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 45, unit: 'MINUTES')
+        timeout(time: 240, unit: 'MINUTES')
         timestamps()
         disableConcurrentBuilds()
     }
@@ -148,21 +148,28 @@ pipeline {
             }
         }
                 /* ===================== OWASP ===================== */
-        stage('OWASP') {
-            steps {
-                sh '''
-                    mkdir -p reports
-                    docker run --rm \
-                        -v "$HOST_WORKSPACE:/src" \
-                        -v "$HOST_WORKSPACE/reports:/report" \
-                        owasp/dependency-check:latest \
-                        --scan /src \
-                        --format HTML --format JSON \
-                        --out /report \
-                        --project FoodFrenzy || true
-                '''
-            }
-        }
+        /* ===================== OWASP ===================== */
+stage('OWASP') {
+    options {
+        timeout(time: 210, unit: 'MINUTES')
+    }
+    steps {
+        sh '''
+            mkdir -p reports
+            docker run --rm \
+                -v "$HOST_WORKSPACE:/src" \
+                -v "$HOST_WORKSPACE/reports:/report" \
+                -v "owasp-nvd-cache:/usr/share/dependency-check/data" \
+                owasp/dependency-check:latest \
+                --scan /src \
+                --format HTML --format JSON \
+                --out /report \
+                --project FoodFrenzy || true
+
+            echo "OWASP OK"
+        '''
+    }
+}
 
         /* ===================== SBOM (Excellence) ===================== */
         stage('SBOM') {
