@@ -2,15 +2,17 @@
 set -euo pipefail
 
 IMAGE_FULL=$1
-WORKSPACE_DIR="${WORKSPACE:-$(pwd)}"
-COSIGN_KEY="$WORKSPACE_DIR/cosign.key"
+
+# Résoudre le vrai chemin hôte du workspace Jenkins
+HOST_WS=$(docker inspect jenkins \
+    --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Source}}{{end}}{{end}}')
+HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Signing image: $IMAGE_FULL"
-echo "Using key: $COSIGN_KEY"
-echo "Workspace: $WORKSPACE_DIR"
+echo "Host workspace: $HOST_WS"
 
 docker run --rm \
-    -v "$WORKSPACE_DIR:/work" \
+    -v "$HOST_WS:/work" \
     -w /work \
     -e COSIGN_PASSWORD="$COSIGN_PASSWORD" \
     gcr.io/projectsigstore/cosign:v2.2.3 \

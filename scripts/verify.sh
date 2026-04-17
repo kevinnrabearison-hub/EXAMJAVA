@@ -2,14 +2,16 @@
 set -euo pipefail
 
 IMAGE_FULL=$1
-WORKSPACE_DIR="${WORKSPACE:-$(pwd)}"
-COSIGN_PUB="$WORKSPACE_DIR/cosign.pub"
+
+HOST_WS=$(docker inspect jenkins \
+    --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Source}}{{end}}{{end}}')
+HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Verifying signature for image: $IMAGE_FULL"
-echo "Using key: $COSIGN_PUB"
+echo "Host workspace: $HOST_WS"
 
 docker run --rm \
-    -v "$WORKSPACE_DIR:/work" \
+    -v "$HOST_WS:/work" \
     -w /work \
     gcr.io/projectsigstore/cosign:v2.2.3 \
     verify --key cosign.pub --insecure-ignore-tlog "$IMAGE_FULL"
