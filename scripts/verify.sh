@@ -8,9 +8,9 @@ HOST_WS=$(docker inspect jenkins \
 HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Verifying signature for image: $IMAGE_FULL"
-echo "Host workspace: $HOST_WS"
 
 docker run --rm \
+    --network host \
     -v "$HOST_WS:/work" \
     -w /work \
     gcr.io/projectsigstore/cosign:v2.2.3 \
