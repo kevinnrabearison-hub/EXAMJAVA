@@ -12,9 +12,15 @@ pipeline {
         IMAGE_FULL     = "localhost:8081/foodfrenzy/foodfrenzy-app:${BUILD_NUMBER}"
         IMAGE_LATEST   = "localhost:8081/foodfrenzy/foodfrenzy-app:latest"
 
-        DEPLOY_DIR = "/opt/foodfrenzy-deploy"
+        DEPLOY_DIR     = "/opt/foodfrenzy-deploy"
 
-        HARBOR_CREDS   = credentials('harbor-credentials')
+        // === SECRETS (Masqués dans les logs Jenkins) ===
+        HARBOR_CREDS   = credentials('harbor-credentials') // contient HARBOR_CREDS_USR et HARBOR_CREDS_PSW
+        DB_ROOT_PWD    = credentials('mysql-root-password')
+        DB_APP_USER    = "foodfrenzy_user"
+        DB_APP_PWD     = credentials('db-app-password')
+        DB_NAME        = "foodfrenzy_db"
+        COSIGN_PWD     = credentials('cosign-key-password')
     }
 
     options {
@@ -146,17 +152,40 @@ pipeline {
             steps {
                 sh '''
                     mkdir -p reports
-
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/src" \
                         -v "$HOST_WORKSPACE/reports:/report" \
                         owasp/dependency-check:latest \
                         --scan /src \
-                        --format HTML \
+                        --format HTML --format JSON \
                         --out /report \
                         --project FoodFrenzy || true
+                '''
+            }
+        }
 
-                    echo "OWASP OK"
+        /* ===================== SBOM (Excellence) ===================== */
+        stage('SBOM') {
+            steps {
+                sh '''
+                    echo "=== GENERATING SBOM (Syft) ==="
+                    mkdir -p reports
+                    docker run --rm \
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v "$HOST_WORKSPACE/reports:/out" \
+                        anchore/syft:latest \
+                        $IMAGE_FULL -o json > reports/sbom.json || true
+                '''
+            }
+        }
+
+        /* ===================== SIGNATURE (Excellence) ===================== */
+        stage('Sign Image') {
+            steps {
+                sh '''
+                    echo "=== SIGNING IMAGE (Cosign) ==="
+                    chmod +x scripts/sign.sh
+                    COSIGN_PASSWORD=$COSIGN_PWD ./scripts/sign.sh $IMAGE_FULL
                 '''
             }
         }
@@ -165,13 +194,26 @@ pipeline {
         stage('Push Harbor') {
             steps {
                 sh '''
+                    set +x
                     echo "$HARBOR_CREDS_PSW" | docker login $HARBOR_HOST \
                         -u "$HARBOR_CREDS_USR" --password-stdin
+                    set -x
 
                     docker push $IMAGE_FULL
                     docker push $IMAGE_LATEST
 
                     docker logout $HARBOR_HOST
+                '''
+            }
+        }
+
+        /* ===================== VERIFY (Pre-Deploy) ===================== */
+        stage('Verify Signature') {
+            steps {
+                sh '''
+                    echo "=== VERIFYING SIGNATURE ==="
+                    chmod +x scripts/verify.sh
+                    ./scripts/verify.sh $IMAGE_FULL
                 '''
             }
         }
@@ -193,15 +235,15 @@ stage('Deploy') {
             cp docker-compose.yml "$DEPLOY_DIR/"
             cd "$DEPLOY_DIR"
 
-            # --- ENV FILE (idempotent) ---
+            # --- ENV FILE (SÉCURISÉ : Plus de mots de passe en dur !) ---
             cat > .env <<EOF
-MYSQL_ROOT_PASSWORD=kevin
-DB_USER=foodfrenzy_user
-DB_PASSWORD=kevin123
-DB_NAME=foodfrenzy_db
-HARBOR_HOST=localhost:8081
-HARBOR_USER=admin
-HARBOR_PASSWORD=Harbor12345
+MYSQL_ROOT_PASSWORD=${DB_ROOT_PWD}
+DB_USER=${DB_APP_USER}
+DB_PASSWORD=${DB_APP_PWD}
+DB_NAME=${DB_NAME}
+HARBOR_HOST=${HARBOR_HOST}
+HARBOR_USER=${HARBOR_CREDS_USR}
+HARBOR_PASSWORD=${HARBOR_CREDS_PSW}
 IMAGE_TAG=${BUILD_NUMBER}
 EOF
 
