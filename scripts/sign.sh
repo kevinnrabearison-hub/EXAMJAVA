@@ -19,22 +19,16 @@ else
     echo "Using latest: $TARGET"
 fi
 
-# Sauvegarder via pipe
+# Sauvegarder + créer image.sig vide + chmod via un seul conteneur
 echo "Saving image to tar..."
 docker save "$TARGET" | \
     docker run --rm -i \
     -v "$HOST_WS:/workspace" \
     alpine:latest \
-    sh -c "cat > /workspace/image-to-sign.tar"
+    sh -c "cat > /workspace/image-to-sign.tar && touch /workspace/image.sig && chmod 777 /workspace/image-to-sign.tar /workspace/image.sig"
 echo "Image saved."
 
-# Rendre le workspace writable pour cosign
-docker run --rm \
-    -v "$HOST_WS:/workspace" \
-    alpine:latest \
-    chmod 777 /workspace
-
-# Signer directement dans le workspace
+# Signer
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
