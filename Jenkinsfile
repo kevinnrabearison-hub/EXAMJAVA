@@ -279,20 +279,9 @@ stage('Health Check') {
         sh '''
             echo "Waiting Spring Boot..."
 
-            # Tester plusieurs IPs possibles
-            for HOST_IP in 172.17.0.1 172.18.0.1 192.168.88.1; do
-                echo "Testing http://${HOST_IP}:8095/actuator/health"
-                if curl -sf --connect-timeout 3 http://${HOST_IP}:8095/actuator/health; then
-                    echo "Host IP found: $HOST_IP"
-                    exit 0
-                fi
-            done
-
-            for i in $(seq 1 15); do
-                for HOST_IP in 172.17.0.1 172.18.0.1 192.168.88.1; do
-                    curl -sf --connect-timeout 3 http://${HOST_IP}:8095/actuator/health && exit 0
-                done
-                echo "Try $i/15"
+            for i in $(seq 1 20); do
+                curl -sf http://172.17.0.1:8095/actuator/health && exit 0
+                echo "Try $i/20"
                 sleep 10
             done
 
@@ -300,7 +289,7 @@ stage('Health Check') {
             exit 1
         '''
     }
-}  
+} 
 
     /* ===================== POST ===================== */
     post {
