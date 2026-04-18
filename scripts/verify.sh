@@ -12,13 +12,12 @@ echo "Verifying signature for image: $IMAGE_FULL"
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
-    -v "/tmp:/tmp" \
     -w /work \
     gcr.io/projectsigstore/cosign:v2.2.3 \
     verify-blob \
     --key cosign.pub \
     --insecure-ignore-tlog \
-    --signature /tmp/image.sig \
-    /tmp/image-to-sign.tar
+    --signature image.sig \
+    image-to-sign.tar
 
 echo "Signature verified. Image is authentic."

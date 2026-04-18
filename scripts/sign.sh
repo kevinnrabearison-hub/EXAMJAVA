@@ -8,22 +8,17 @@ HOST_WS=$(docker inspect jenkins \
 HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Signing image: $IMAGE_FULL"
+echo "Host workspace: $HOST_WS"
 
-# Récupérer le digest local de l'image
-IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_FULL" 2>/dev/null || \
-               docker inspect --format='{{.Id}}' "$IMAGE_FULL")
+# Sauvegarder l'image dans le workspace (accessible par cosign)
+JENKINS_WS="/var/jenkins_home/workspace/FoodFrenzy-Pipeline"
+docker save "$IMAGE_FULL" -o "$JENKINS_WS/image-to-sign.tar"
+echo "Image saved to tar"
 
-echo "Image digest: $IMAGE_DIGEST"
-
-# Sauvegarder l'image en tar
-echo "Saving image to tar..."
-docker save "$IMAGE_FULL" -o /tmp/image-to-sign.tar
-
-# Signer le tar avec cosign
+# Signer le tar (monté via HOST_WS)
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
-    -v "/tmp:/tmp" \
     -w /work \
     -e COSIGN_PASSWORD="$COSIGN_PASSWORD" \
     gcr.io/projectsigstore/cosign:v2.2.3 \
@@ -31,8 +26,7 @@ docker run --rm \
     --key cosign.key \
     --tlog-upload=false \
     --yes \
-    --output-signature /tmp/image.sig \
-    /tmp/image-to-sign.tar
+    --output-signature image.sig \
+    image-to-sign.tar
 
-echo "Signature saved to /tmp/image.sig"
 echo "Image signed successfully."
