@@ -19,7 +19,7 @@ else
     echo "Using latest: $TARGET"
 fi
 
-# Sauvegarder via pipe dans le workspace Jenkins
+# Sauvegarder via pipe
 echo "Saving image to tar..."
 docker save "$TARGET" | \
     docker run --rm -i \
@@ -28,8 +28,14 @@ docker save "$TARGET" | \
     sh -c "cat > /workspace/image-to-sign.tar"
 echo "Image saved."
 
-# Signer — signature dans /tmp du conteneur, puis docker cp vers workspace
-CONTAINER_ID=$(docker run -d \
+# Rendre le workspace writable pour cosign
+docker run --rm \
+    -v "$HOST_WS:/workspace" \
+    alpine:latest \
+    chmod 777 /workspace
+
+# Signer directement dans le workspace
+docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
     -w /work \
@@ -39,15 +45,7 @@ CONTAINER_ID=$(docker run -d \
     --key cosign.key \
     --tlog-upload=false \
     --yes \
-    --output-signature /tmp/image.sig \
-    image-to-sign.tar)
+    --output-signature /work/image.sig \
+    /work/image-to-sign.tar
 
-# Attendre la fin
-docker wait "$CONTAINER_ID"
-
-# Copier la signature vers le workspace
-docker cp "$CONTAINER_ID:/tmp/image.sig" "$HOST_WS/image.sig"
-docker rm "$CONTAINER_ID"
-
-echo "Signature copied to workspace."
 echo "Image signed successfully."
