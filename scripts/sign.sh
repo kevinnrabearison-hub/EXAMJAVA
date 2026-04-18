@@ -28,8 +28,8 @@ docker save "$TARGET" | \
     sh -c "cat > /workspace/image-to-sign.tar"
 echo "Image saved."
 
-# Signer — écrire signature dans /tmp puis copier dans workspace
-docker run --rm \
+# Signer — signature dans /tmp du conteneur, puis docker cp vers workspace
+CONTAINER_ID=$(docker run -d \
     --network host \
     -v "$HOST_WS:/work" \
     -w /work \
@@ -40,30 +40,14 @@ docker run --rm \
     --tlog-upload=false \
     --yes \
     --output-signature /tmp/image.sig \
-    image-to-sign.tar
+    image-to-sign.tar)
 
-# Copier la signature dans le workspace via alpine
-docker run --rm \
-    -v "$HOST_WS:/workspace" \
-    alpine:latest \
-    sh -c "cp /tmp/image.sig /workspace/image.sig 2>/dev/null || true"
+# Attendre la fin
+docker wait "$CONTAINER_ID"
 
-# Alternative — récupérer depuis le conteneur cosign via stdout
-docker run --rm \
-    --network host \
-    -v "$HOST_WS:/work" \
-    -w /work \
-    -e COSIGN_PASSWORD="$COSIGN_PASSWORD" \
-    gcr.io/projectsigstore/cosign:v2.2.3 \
-    sign-blob \
-    --key cosign.key \
-    --tlog-upload=false \
-    --yes \
-    --output-signature - \
-    image-to-sign.tar | \
-    docker run --rm -i \
-    -v "$HOST_WS:/workspace" \
-    alpine:latest \
-    sh -c "cat > /workspace/image.sig"
+# Copier la signature vers le workspace
+docker cp "$CONTAINER_ID:/tmp/image.sig" "$HOST_WS/image.sig"
+docker rm "$CONTAINER_ID"
 
+echo "Signature copied to workspace."
 echo "Image signed successfully."
