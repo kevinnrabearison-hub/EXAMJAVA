@@ -8,23 +8,31 @@ HOST_WS=$(docker inspect jenkins \
 HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Signing image: $IMAGE_FULL"
-echo "Host workspace: $HOST_WS"
 
-# Login Harbor depuis le conteneur cosign
+# Récupérer le digest local de l'image
+IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_FULL" 2>/dev/null || \
+               docker inspect --format='{{.Id}}' "$IMAGE_FULL")
+
+echo "Image digest: $IMAGE_DIGEST"
+
+# Sauvegarder l'image en tar
+echo "Saving image to tar..."
+docker save "$IMAGE_FULL" -o /tmp/image-to-sign.tar
+
+# Signer le tar avec cosign
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
-    -v /root/.docker:/root/.docker \
+    -v "/tmp:/tmp" \
     -w /work \
     -e COSIGN_PASSWORD="$COSIGN_PASSWORD" \
-    -e REGISTRY_USERNAME="$HARBOR_USER" \
-    -e REGISTRY_PASSWORD="$HARBOR_PASSWORD" \
     gcr.io/projectsigstore/cosign:v2.2.3 \
-    sign --key cosign.key \
+    sign-blob \
+    --key cosign.key \
     --tlog-upload=false \
     --yes \
-    --registry-username="$HARBOR_USER" \
-    --registry-password="$HARBOR_PASSWORD" \
-    "$IMAGE_FULL"
+    --output-signature /tmp/image.sig \
+    /tmp/image-to-sign.tar
 
+echo "Signature saved to /tmp/image.sig"
 echo "Image signed successfully."
