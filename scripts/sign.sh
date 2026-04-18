@@ -2,8 +2,8 @@
 set -euo pipefail
 
 IMAGE_FULL=$1
-# Fallback sur latest si le tag numéroté n'existe pas
-IMAGE_BASE=$(echo "$IMAGE_FULL" | cut -d: -f1)
+# Extraire la base correctement (supprimer seulement le dernier :tag)
+IMAGE_BASE=$(echo "$IMAGE_FULL" | sed 's/:[^:]*$//')
 IMAGE_LATEST="${IMAGE_BASE}:latest"
 
 HOST_WS=$(docker inspect jenkins \
@@ -11,6 +11,8 @@ HOST_WS=$(docker inspect jenkins \
 HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Signing image: $IMAGE_FULL"
+echo "Image base: $IMAGE_BASE"
+echo "Image latest: $IMAGE_LATEST"
 echo "Host workspace: $HOST_WS"
 
 # Utiliser le tag numéroté ou latest
