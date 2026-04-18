@@ -47,7 +47,7 @@ services:
       DB_USER:     ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "8090:8080"                    # accessible sur localhost:8090
+      - "8095:8080"                    # accessible sur localhost:8090
     networks:
       - db-net                         # parle à MySQL
       - app-net                        # accessible depuis l'extérieur

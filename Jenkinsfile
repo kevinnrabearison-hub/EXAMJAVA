@@ -274,23 +274,20 @@ EOF
 }
 
         /* ===================== HEALTH CHECK ===================== */
-        stage('Health Check') {
-            steps {
-                sh '''
-                    echo "Waiting Spring Boot..."
-
-                    for i in $(seq 1 15); do
-                        curl -sf http://localhost:8090/actuator/health && exit 0
-                        echo "Try $i/15"
-                        sleep 10
-                    done
-
-                    echo "FAILED HEALTH CHECK"
-                    exit 1
-                '''
-            }
-        }
+stage('Health Check') {
+    steps {
+        sh '''
+            echo "Waiting Spring Boot..."
+            for i in $(seq 1 15); do
+                curl -sf http://localhost:8095/actuator/health && exit 0
+                echo "Try $i/15"
+                sleep 10
+            done
+            echo "FAILED HEALTH CHECK"
+            exit 1
+        '''
     }
+}
 
     /* ===================== POST ===================== */
     post {
