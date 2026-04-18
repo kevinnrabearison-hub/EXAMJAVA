@@ -285,11 +285,25 @@ stage('Health Check') {
                 sleep 10
             done
 
-            echo "FAILED HEALTH CHECK"
-            exit 1
-        '''
-    }
-} 
+/* ===================== HEALTH CHECK ===================== */
+        stage('Health Check') {
+            steps {
+                sh '''
+                    echo "Waiting Spring Boot..."
+
+                    for i in $(seq 1 20); do
+                        curl -sf http://172.17.0.1:8095/actuator/health && exit 0
+                        echo "Try $i/20"
+                        sleep 10
+                    done
+
+                    echo "FAILED HEALTH CHECK"
+                    exit 1
+                '''
+            }
+        }
+
+    }   // ferme stages {
 
     /* ===================== POST ===================== */
     post {
@@ -313,4 +327,4 @@ stage('Health Check') {
         }
     }
 
-}   
+}   // ferme pipeline {
