@@ -200,21 +200,24 @@ pipeline {
         }
 
         /* ===================== PUSH HARBOR ===================== */
-        stage('Push Harbor') {
-            steps {
-                sh '''
-                    set +x
-                    echo "$HARBOR_CREDS_PSW" | docker login $HARBOR_HOST \
-                        -u "$HARBOR_CREDS_USR" --password-stdin
-                    set -x
+stage('Push Harbor') {
+    steps {
+        sh '''
+            set +x
+            echo "$HARBOR_CREDS_PSW" | docker login $HARBOR_HOST \
+                -u "$HARBOR_CREDS_USR" --password-stdin
+            set -x
 
-                    docker push $IMAGE_FULL
-                    docker push $IMAGE_LATEST
+            # Re-tagger latest avec BUILD_NUMBER si nécessaire
+            docker tag $IMAGE_LATEST $IMAGE_FULL 2>/dev/null || true
 
-                    docker logout $HARBOR_HOST
-                '''
-            }
-        }
+            docker push $IMAGE_FULL
+            docker push $IMAGE_LATEST
+
+            docker logout $HARBOR_HOST
+        '''
+    }
+}
 
         /* ===================== VERIFY (Pre-Deploy) ===================== */
         stage('Verify Signature') {
