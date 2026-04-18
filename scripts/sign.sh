@@ -2,7 +2,6 @@
 set -euo pipefail
 
 IMAGE_FULL=$1
-# Extraire la base correctement (supprimer seulement le dernier :tag)
 IMAGE_BASE=$(echo "$IMAGE_FULL" | sed 's/:[^:]*$//')
 IMAGE_LATEST="${IMAGE_BASE}:latest"
 
@@ -11,26 +10,30 @@ HOST_WS=$(docker inspect jenkins \
 HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
 echo "Signing image: $IMAGE_FULL"
-echo "Image base: $IMAGE_BASE"
-echo "Image latest: $IMAGE_LATEST"
 echo "Host workspace: $HOST_WS"
 
 # Utiliser le tag numéroté ou latest
 if docker image inspect "$IMAGE_FULL" > /dev/null 2>&1; then
     TARGET="$IMAGE_FULL"
-    echo "Using tagged image: $TARGET"
-elif docker image inspect "$IMAGE_LATEST" > /dev/null 2>&1; then
-    TARGET="$IMAGE_LATEST"
-    echo "Tagged image not found, using: $TARGET"
 else
-    echo "ERROR: No image found for $IMAGE_FULL or $IMAGE_LATEST"
-    docker images | grep foodfrenzy || true
-    exit 1
+    TARGET="$IMAGE_LATEST"
+    echo "Using latest: $TARGET"
 fi
 
-# Sauvegarder dans HOST_WS
+# Sauvegarder via conteneur intermédiaire dans le workspace Jenkins
 echo "Saving image to tar..."
-docker save "$TARGET" -o "${HOST_WS}/image-to-sign.tar"
+docker run --rm \
+    -v "$HOST_WS:/workspace" \
+    --entrypoint="" \
+    alpine:latest \
+    sh -c "echo 'workspace mounted'" || true
+
+docker save "$TARGET" | \
+    docker run --rm -i \
+    -v "$HOST_WS:/workspace" \
+    alpine:latest \
+    sh -c "cat > /workspace/image-to-sign.tar"
+
 echo "Image saved."
 
 # Signer
