@@ -148,28 +148,27 @@ pipeline {
             }
         }
                 /* ===================== OWASP ===================== */
-        /* ===================== OWASP ===================== */
-stage('OWASP') {
-    options {
-        timeout(time: 210, unit: 'MINUTES')
-    }
-    steps {
-        sh '''
-            mkdir -p reports
-            docker run --rm \
-                -v "$HOST_WORKSPACE:/src" \
-                -v "$HOST_WORKSPACE/reports:/report" \
-                -v "owasp-nvd-cache:/usr/share/dependency-check/data" \
-                owasp/dependency-check:latest \
-                --scan /src \
-                --format HTML --format JSON \
-                --out /report \
-                --project FoodFrenzy || true
+        stage('OWASP') {
+            options {
+                timeout(time: 210, unit: 'MINUTES')  // ← timeout propre au stage
+            }
+            steps {
+                sh '''
+                    mkdir -p reports
+                    docker run --rm \
+                        -v "$HOST_WORKSPACE:/src" \
+                        -v "$HOST_WORKSPACE/reports:/report" \
+                        -v "owasp-nvd-cache:/usr/share/dependency-check/data" \
+                        owasp/dependency-check:latest \
+                        --scan /src \
+                        --format HTML --format JSON \
+                        --out /report \
+                        --project FoodFrenzy || true
 
-            echo "OWASP OK"
-        '''
-    }
-}
+                    echo "OWASP OK"
+                '''
+            }
+        }
 
         /* ===================== SBOM (Excellence) ===================== */
         stage('SBOM') {
@@ -192,7 +191,10 @@ stage('OWASP') {
                 sh '''
                     echo "=== SIGNING IMAGE (Cosign) ==="
                     chmod +x scripts/sign.sh
-                    COSIGN_PASSWORD=$COSIGN_PWD ./scripts/sign.sh $IMAGE_FULL
+                    COSIGN_PASSWORD=$COSIGN_PWD \
+                    HARBOR_USER=$HARBOR_CREDS_USR \
+                    HARBOR_PASSWORD=$HARBOR_CREDS_PSW \
+                    ./scripts/sign.sh $IMAGE_FULL
                 '''
             }
         }
@@ -220,6 +222,8 @@ stage('OWASP') {
                 sh '''
                     echo "=== VERIFYING SIGNATURE ==="
                     chmod +x scripts/verify.sh
+                    HARBOR_USER=$HARBOR_CREDS_USR \
+                    HARBOR_PASSWORD=$HARBOR_CREDS_PSW \
                     ./scripts/verify.sh $IMAGE_FULL
                 '''
             }
