@@ -239,17 +239,12 @@ stage('Deploy') {
             set -euo pipefail
 
             DEPLOY_DIR="/opt/foodfrenzy-deploy"
-
             echo "Deploying to $DEPLOY_DIR"
 
-            # --- CREATE DIR SAFE ---
             mkdir -p "$DEPLOY_DIR"
-
-            # --- COPY COMPOSE FILE ---
             cp docker-compose.yml "$DEPLOY_DIR/"
             cd "$DEPLOY_DIR"
 
-            # --- ENV FILE (SÉCURISÉ : Plus de mots de passe en dur !) ---
             cat > .env <<EOF
 MYSQL_ROOT_PASSWORD=${DB_ROOT_PWD}
 DB_USER=${DB_APP_USER}
@@ -262,26 +257,18 @@ IMAGE_TAG=${BUILD_NUMBER}
 EOF
 
             echo "Stopping previous stack..."
+            docker compose down --remove-orphans || true
 
-            # --- SAFE DOCKER COMPOSE HANDLING ---
-            if docker compose version >/dev/null 2>&1; then
-                echo "Using docker compose v2"
+            # Login Harbor avant le pull
+            set +x
+            echo "${HARBOR_CREDS_PSW}" | docker login ${HARBOR_HOST} \
+                -u "${HARBOR_CREDS_USR}" --password-stdin
+            set -x
 
-                docker compose down --remove-orphans || true
-                docker compose up -d --pull always
-                docker compose ps
+            docker compose up -d --pull always
+            docker compose ps
 
-            elif command -v docker-compose >/dev/null 2>&1; then
-                echo "Using docker-compose v1"
-
-                docker-compose down || true
-                docker-compose up -d
-                docker-compose ps
-
-            else
-                echo "ERROR: No Docker Compose available in Jenkins container"
-                exit 1
-            fi
+            docker logout ${HARBOR_HOST} || true
         '''
     }
 }
