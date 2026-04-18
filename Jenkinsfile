@@ -14,8 +14,7 @@ pipeline {
 
         DEPLOY_DIR     = "/opt/foodfrenzy-deploy"
 
-        // === SECRETS (Masqués dans les logs Jenkins) ===
-        HARBOR_CREDS   = credentials('harbor-credentials') // contient HARBOR_CREDS_USR et HARBOR_CREDS_PSW
+        HARBOR_CREDS   = credentials('harbor-credentials')
         DB_ROOT_PWD    = credentials('mysql-root-password')
         DB_APP_USER    = "foodfrenzy_user"
         DB_APP_PWD     = credentials('db-app-password')
@@ -32,20 +31,16 @@ pipeline {
 
     stages {
 
-        /* ===================== CHECKOUT ===================== */
         stage('Checkout') {
             steps {
-                echo "===CHECKOUT ==="
+                echo "=== CHECKOUT ==="
                 checkout scm
             }
         }
 
-        /* ===================== RESOLVE HOST WORKSPACE ===================== */
         stage('Resolve Host Workspace') {
             steps {
                 script {
-                    // Récupère le vrai chemin du workspace sur l'hôte Docker
-                    // en inspectant le volume monté dans le conteneur Jenkins
                     env.HOST_WORKSPACE = sh(
                         script: '''
                             docker inspect jenkins \
@@ -53,38 +48,31 @@ pipeline {
                         ''',
                         returnStdout: true
                     ).trim() + "/workspace/FoodFrenzy-Pipeline"
-
                     echo "HOST_WORKSPACE resolved: ${env.HOST_WORKSPACE}"
                 }
             }
         }
 
-        /* ===================== SAST ===================== */
         stage('SAST') {
             parallel {
-
                 stage('Semgrep') {
                     steps {
                         sh '''
                             mkdir -p reports
-
                             docker run --rm \
                                 -v "$HOST_WORKSPACE:/src" \
                                 -w /src \
                                 returntocorp/semgrep:latest \
                                 semgrep --config p/java \
                                 --json --output reports/semgrep.json src/ || true
-
                             echo "Semgrep OK"
                         '''
                     }
                 }
-
                 stage('Gitleaks') {
                     steps {
                         sh '''
                             mkdir -p reports
-
                             docker run --rm \
                                 -v "$HOST_WORKSPACE:/path" \
                                 zricethezav/gitleaks:latest detect \
@@ -92,7 +80,6 @@ pipeline {
                                 --report-format json \
                                 --report-path /path/reports/gitleaks.json \
                                 --exit-code 0 || true
-
                             echo "Gitleaks OK"
                         '''
                     }
@@ -100,28 +87,21 @@ pipeline {
             }
         }
 
-        /* ===================== MAVEN BUILD ===================== */
         stage('Build Maven') {
             steps {
                 sh '''
                     echo "=== MAVEN BUILD ==="
-                    echo "Mounting HOST_WORKSPACE: $HOST_WORKSPACE"
-
                     docker run --rm \
                         -v "$HOST_WORKSPACE:/app" \
                         -v "$HOST_WORKSPACE/.m2:/root/.m2" \
                         -w /app \
                         maven:3.9.6-eclipse-temurin-17 \
                         mvn clean package -DskipTests -B
-
                     ls -lh target/*.jar || true
                 '''
             }
         }
 
-
-
-        /* ===================== DOCKER BUILD ===================== */
         stage('Build Docker') {
             steps {
                 sh '''
@@ -131,7 +111,6 @@ pipeline {
             }
         }
 
-        /* ===================== TRIVY ===================== */
         stage('Trivy') {
             steps {
                 sh '''
@@ -142,15 +121,14 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --format table \
                         $IMAGE_FULL || true
-
                     echo "Trivy OK"
                 '''
             }
         }
-                /* ===================== OWASP ===================== */
+
         stage('OWASP') {
             options {
-                timeout(time: 210, unit: 'MINUTES')  // ← timeout propre au stage
+                timeout(time: 210, unit: 'MINUTES')
             }
             steps {
                 sh '''
@@ -164,13 +142,11 @@ pipeline {
                         --format HTML --format JSON \
                         --out /report \
                         --project FoodFrenzy || true
-
                     echo "OWASP OK"
                 '''
             }
         }
 
-        /* ===================== SBOM (Excellence) ===================== */
         stage('SBOM') {
             steps {
                 sh '''
@@ -185,7 +161,6 @@ pipeline {
             }
         }
 
-        /* ===================== SIGNATURE (Excellence) ===================== */
         stage('Sign Image') {
             steps {
                 sh '''
@@ -199,27 +174,21 @@ pipeline {
             }
         }
 
-        /* ===================== PUSH HARBOR ===================== */
-stage('Push Harbor') {
-    steps {
-        sh '''
-            set +x
-            echo "$HARBOR_CREDS_PSW" | docker login $HARBOR_HOST \
-                -u "$HARBOR_CREDS_USR" --password-stdin
-            set -x
+        stage('Push Harbor') {
+            steps {
+                sh '''
+                    set +x
+                    echo "$HARBOR_CREDS_PSW" | docker login $HARBOR_HOST \
+                        -u "$HARBOR_CREDS_USR" --password-stdin
+                    set -x
+                    docker tag $IMAGE_LATEST $IMAGE_FULL 2>/dev/null || true
+                    docker push $IMAGE_FULL
+                    docker push $IMAGE_LATEST
+                    docker logout $HARBOR_HOST
+                '''
+            }
+        }
 
-            # Re-tagger latest avec BUILD_NUMBER si nécessaire
-            docker tag $IMAGE_LATEST $IMAGE_FULL 2>/dev/null || true
-
-            docker push $IMAGE_FULL
-            docker push $IMAGE_LATEST
-
-            docker logout $HARBOR_HOST
-        '''
-    }
-}
-
-        /* ===================== VERIFY (Pre-Deploy) ===================== */
         stage('Verify Signature') {
             steps {
                 sh '''
@@ -232,20 +201,16 @@ stage('Push Harbor') {
             }
         }
 
-        /* ===================== DEPLOY ===================== */
-stage('Deploy') {
-    steps {
-        sh '''
-            set -euo pipefail
-
-            DEPLOY_DIR="/opt/foodfrenzy-deploy"
-            echo "Deploying to $DEPLOY_DIR"
-
-            mkdir -p "$DEPLOY_DIR"
-            cp docker-compose.yml "$DEPLOY_DIR/"
-            cd "$DEPLOY_DIR"
-
-            cat > .env <<EOF
+        stage('Deploy') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    DEPLOY_DIR="/opt/foodfrenzy-deploy"
+                    echo "Deploying to $DEPLOY_DIR"
+                    mkdir -p "$DEPLOY_DIR"
+                    cp docker-compose.yml "$DEPLOY_DIR/"
+                    cd "$DEPLOY_DIR"
+                    cat > .env <<EOF
 MYSQL_ROOT_PASSWORD=${DB_ROOT_PWD}
 DB_USER=${DB_APP_USER}
 DB_PASSWORD=${DB_APP_PWD}
@@ -255,69 +220,46 @@ HARBOR_USER=${HARBOR_CREDS_USR}
 HARBOR_PASSWORD=${HARBOR_CREDS_PSW}
 IMAGE_TAG=${BUILD_NUMBER}
 EOF
+                    echo "Stopping previous stack..."
+                    docker compose down --remove-orphans || true
+                    set +x
+                    echo "${HARBOR_CREDS_PSW}" | docker login ${HARBOR_HOST} \
+                        -u "${HARBOR_CREDS_USR}" --password-stdin
+                    set -x
+                    docker compose up -d --pull always
+                    docker compose ps
+                    docker logout ${HARBOR_HOST} || true
+                '''
+            }
+        }
 
-            echo "Stopping previous stack..."
-            docker compose down --remove-orphans || true
-
-            # Login Harbor avant le pull
-            set +x
-            echo "${HARBOR_CREDS_PSW}" | docker login ${HARBOR_HOST} \
-                -u "${HARBOR_CREDS_USR}" --password-stdin
-            set -x
-
-            docker compose up -d --pull always
-            docker compose ps
-
-            docker logout ${HARBOR_HOST} || true
-        '''
-    }
-}
-
-/* ===================== HEALTH CHECK ===================== */
-stage('Health Check') {
-    steps {
-        sh '''
-            echo "Waiting Spring Boot..."
-
-            for i in $(seq 1 20); do
-                curl -sf http://172.17.0.1:8095/actuator/health && exit 0
-                echo "Try $i/20"
-                sleep 10
-            done
-
-/* ===================== HEALTH CHECK ===================== */
         stage('Health Check') {
             steps {
                 sh '''
                     echo "Waiting Spring Boot..."
-
                     for i in $(seq 1 20); do
                         curl -sf http://172.17.0.1:8095/actuator/health && exit 0
                         echo "Try $i/20"
                         sleep 10
                     done
-
                     echo "FAILED HEALTH CHECK"
                     exit 1
                 '''
             }
         }
 
-    }   // ferme stages {
+    }
 
-    /* ===================== POST ===================== */
     post {
         success {
             echo "PIPELINE SUCCESS - Build #${BUILD_NUMBER}"
         }
-
         failure {
             echo "PIPELINE FAILED"
             sh '''
                 docker compose -f $DEPLOY_DIR/docker-compose.yml logs --tail=30 || true
             '''
         }
-
         always {
             archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
             sh '''
@@ -327,4 +269,4 @@ stage('Health Check') {
         }
     }
 
-}   // ferme pipeline {
+}
