@@ -12,7 +12,6 @@ HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 echo "Signing image: $IMAGE_FULL"
 echo "Host workspace: $HOST_WS"
 
-# Utiliser le tag numéroté ou latest
 if docker image inspect "$IMAGE_FULL" > /dev/null 2>&1; then
     TARGET="$IMAGE_FULL"
 else
@@ -20,23 +19,16 @@ else
     echo "Using latest: $TARGET"
 fi
 
-# Sauvegarder via conteneur intermédiaire dans le workspace Jenkins
+# Sauvegarder via pipe dans le workspace Jenkins
 echo "Saving image to tar..."
-docker run --rm \
-    -v "$HOST_WS:/workspace" \
-    --entrypoint="" \
-    alpine:latest \
-    sh -c "echo 'workspace mounted'" || true
-
 docker save "$TARGET" | \
     docker run --rm -i \
     -v "$HOST_WS:/workspace" \
     alpine:latest \
     sh -c "cat > /workspace/image-to-sign.tar"
-
 echo "Image saved."
 
-# Signer
+# Signer — écrire signature dans /tmp puis copier dans workspace
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
@@ -47,7 +39,31 @@ docker run --rm \
     --key cosign.key \
     --tlog-upload=false \
     --yes \
-    --output-signature image.sig \
+    --output-signature /tmp/image.sig \
     image-to-sign.tar
+
+# Copier la signature dans le workspace via alpine
+docker run --rm \
+    -v "$HOST_WS:/workspace" \
+    alpine:latest \
+    sh -c "cp /tmp/image.sig /workspace/image.sig 2>/dev/null || true"
+
+# Alternative — récupérer depuis le conteneur cosign via stdout
+docker run --rm \
+    --network host \
+    -v "$HOST_WS:/work" \
+    -w /work \
+    -e COSIGN_PASSWORD="$COSIGN_PASSWORD" \
+    gcr.io/projectsigstore/cosign:v2.2.3 \
+    sign-blob \
+    --key cosign.key \
+    --tlog-upload=false \
+    --yes \
+    --output-signature - \
+    image-to-sign.tar | \
+    docker run --rm -i \
+    -v "$HOST_WS:/workspace" \
+    alpine:latest \
+    sh -c "cat > /workspace/image.sig"
 
 echo "Image signed successfully."
