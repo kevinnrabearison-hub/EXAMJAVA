@@ -2,7 +2,7 @@
 
 Cette analyse de risques documente les menaces potentielles sur la supply chain logicielle du projet FoodFrenzy et les mesures de sécurité mises en place pour les atténuer.
 
-## 🛡️ Matrice STRIDE & Contre-mesures
+## Matrice STRIDE & Contre-mesures
 
 | Catégorie STRIDE | Menace Identifiée | Mesure de Sécurisation (Mitigation) |
 | :--- | :--- | :--- |
@@ -15,7 +15,7 @@ Cette analyse de risques documente les menaces potentielles sur la supply chain 
 
 ---
 
-## 🏗️ Sécurisation de la Supply Chain (Software Supply Chain Security)
+##  Sécurisation de la Supply Chain (Software Supply Chain Security)
 
 Le pipeline implémente les principes du **SLSA (Supply-chain Levels for Software Artifacts)** :
 
@@ -25,6 +25,6 @@ Le pipeline implémente les principes du **SLSA (Supply-chain Levels for Softwar
 
 ---
 
-## ⚖️ Conformité OWASP
+##  Conformité OWASP
 
 Le projet respecte les recommandations de l'**OWASP Top 10** (notamment A06:2021 – Vulnerable and Outdated Components) grâce à l'intégration de `dependency-check` qui bloque ou alerte sur l'utilisation de librairies obsolètes.
