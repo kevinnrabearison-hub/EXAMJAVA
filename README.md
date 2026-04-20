@@ -189,4 +189,4 @@ docker build -t localhost:8081/foodfrenzy/foodfrenzy-app:test .
 - **Secrets** via `.env` (jamais dans le code)
 - **Image signée** avec Cosign avant chaque push
 - **Scan CVE** Trivy à chaque build
-- **SAST** Semgrep sur les règles Java + Spring Security
+- **SAST** Semgrep sur les règles Java + Spring Security# test webhook Mon Apr 20 23:03:32 EAT 2026
