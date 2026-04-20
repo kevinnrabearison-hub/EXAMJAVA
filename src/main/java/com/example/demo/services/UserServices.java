@@ -52,15 +52,8 @@ public class UserServices
 	
 	public boolean validateLoginCredentials(String email,String password)
 	{
-		List<User> users = (List<User>) this.userRepository.findAll();
-		for(User u:users)
-		{
-		if(u!=null && u.getUpassword().equals(password) && u.getUemail().equals(email))
-		{
-			return true;
-		}
-		}
-		return false;
+		User user = this.userRepository.findUserByUemail(email);
+		return user != null && user.getUpassword().equals(password);
 	}
 	
 

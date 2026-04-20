@@ -23,7 +23,7 @@
             <img src="./Images/biryani/Biryani_of_Hyderabadi.jpg" alt="Chicken Biryani">
             <p class="item-name">Chicken Biryani</p>
             <p class="item-price">Price: Rs 410</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Chicken Biryani}" id="buy">Buy Now</a>
         </div>
  
  <div class="item-card">
@@ -34,7 +34,7 @@
             <img src="./Images//paneer/paneer-butter-masala.jpg" alt="Chicken Biryani">
             <p class="item-name">Paneer Butter </p>
             <p class="item-price">Price: Rs 290</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Paneer Butter}" id="buy">Buy Now</a>
         </div> 
          
          <div class="item-card">
@@ -45,7 +45,7 @@
             <img src="./Images/chicken/Afgani-chicken-curry.jpg" alt="Chicken Biryani">
             <p class="item-name">Afgani Chicken</p>
             <p class="item-price">Price: Rs 410</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Afgani Chicken}" id="buy">Buy Now</a>
         </div> 
         
         <div class="item-card">
@@ -56,7 +56,7 @@
             <img src="./Images/chicken/butter-chicken.jpg" alt="Chicken Biryani">
             <p class="item-name">Butter Chicken</p>
             <p class="item-price">Price: Rs 380</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Butter Chicken}" id="buy">Buy Now</a>
         </div> 
         
         <div class="item-card">
@@ -67,7 +67,7 @@
             <img src="./Images/north-india-food/Laccha-Paratha.jpg" alt="Chicken Biryani">
             <p class="item-name">Laccha Paratha</p>
             <p class="item-price">Price: Rs 30</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Laccha Paratha}" id="buy">Buy Now</a>
         </div> 
         
         <div class="item-card">
@@ -78,7 +78,7 @@
             <img src="./Images/chicken/Matka-Chicken.jpg" alt="Chicken Biryani">
             <p class="item-name">Matka-Chicken</p>
             <p class="item-price">Price: Rs 510</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Matka-Chicken}" id="buy">Buy Now</a>
         </div>
       
       <div class="item-card">
@@ -89,7 +89,7 @@
             <img src="./Images/chicken/Tandoori-chicken-tikka.jpg" alt="Chicken Biryani">
             <p class="item-name">Chicken Tikka</p>
             <p class="item-price">Price: Rs 310</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Chicken Tikka}" id="buy">Buy Now</a>
         </div> 
         
         <div class="item-card">
@@ -100,7 +100,7 @@
             <img src="./Images/north-india-food/Honey-Chilli-Potato.jpg" alt="Chicken Biryani">
             <p class="item-name">Chilli Potato</p>
             <p class="item-price">Price: Rs 150</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Chilli Potato}" id="buy">Buy Now</a>
         </div>   
          
          <div class="item-card">
@@ -111,7 +111,7 @@
             <img src="./Images/north-india-food/chola-bhatura.jpg" alt="Chicken Biryani">
             <p class="item-name">Chola Bhatura</p>
             <p class="item-price">Price: Rs 180</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Chola Bhatura}" id="buy">Buy Now</a>
         </div>   
          
          <div class="item-card">
@@ -122,7 +122,7 @@
             <img src="./Images/north-india-food/Gulab Jamun.jpg" alt="Chicken Biryani">
             <p class="item-name">Gulab Jamun</p>
             <p class="item-price">Price: Rs 50</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Gulab Jamun}" id="buy">Buy Now</a>
         </div>   
         
         <div class="item-card">
@@ -133,7 +133,7 @@
             <img src="./Images/chinese/chowmein.jpg" alt="Chicken Biryani">
             <p class="item-name">Chowmein</p>
             <p class="item-price">Price: Rs 150</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Chowmein}" id="buy">Buy Now</a>
         </div>   
         
         <div class="item-card">
@@ -144,17 +144,11 @@
             <img src="./Images/paneer/paneer-do-pyaza.jpg" alt="Chicken Biryani">
             <p class="item-name">Paneer Do Pyaza</p>
             <p class="item-price">Price: Rs 270</p>
-            <a href="/login" id="buy">Buy Now</a>
+            <a th:href="@{/product/buy/Paneer Do Pyaza}" id="buy">Buy Now</a>
         </div>  
          
     </div>
     </div>
-    <script>
-        document.getElementById("buy").addEventListener("click", function (event) {
-            event.preventDefault();
-            alert("Please Login as a User to buy Products");
-        });
-    </script>
 </body>
 
 </html>
