@@ -7,17 +7,19 @@ HOST_WS=$(docker inspect jenkins \
     --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Source}}{{end}}{{end}}')
 HOST_WS="${HOST_WS}/workspace/FoodFrenzy-Pipeline"
 
-echo "Verifying signature for image: $IMAGE_FULL"
+echo "Verifying signature from Harbor Registry: $IMAGE_FULL"
 
 docker run --rm \
     --network host \
     -v "$HOST_WS:/work" \
     -w /work \
     gcr.io/projectsigstore/cosign:v2.2.3 \
-    verify-blob \
+    verify \
     --key cosign.pub \
     --insecure-ignore-tlog \
-    --signature image.sig \
-    image-to-sign.tar
+    --allow-insecure-registry \
+    --registry-username="$HARBOR_USER" \
+    --registry-password="$HARBOR_PASSWORD" \
+    "$IMAGE_FULL"
 
 echo "Signature verified. Image is authentic."

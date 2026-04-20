@@ -157,23 +157,12 @@ pipeline {
                         -v "$HOST_WORKSPACE/reports:/out" \
                         anchore/syft:latest \
                         $IMAGE_FULL -o json > reports/sbom.json || true
+                    echo "SBOM OK"
                 '''
             }
         }
 
-        stage('Sign Image') {
-            steps {
-                sh '''
-                    echo "=== SIGNING IMAGE (Cosign) ==="
-                    chmod +x scripts/sign.sh
-                    COSIGN_PASSWORD=$COSIGN_PWD \
-                    HARBOR_USER=$HARBOR_CREDS_USR \
-                    HARBOR_PASSWORD=$HARBOR_CREDS_PSW \
-                    ./scripts/sign.sh $IMAGE_FULL
-                '''
-            }
-        }
-
+        /* ===== PUSH HARBOR AVANT SIGNATURE ===== */
         stage('Push Harbor') {
             steps {
                 sh '''
@@ -185,10 +174,26 @@ pipeline {
                     docker push $IMAGE_FULL
                     docker push $IMAGE_LATEST
                     docker logout $HARBOR_HOST
+                    echo "Push Harbor OK"
                 '''
             }
         }
 
+        /* ===== SIGNATURE APRÈS PUSH (OCI dans Harbor) ===== */
+        stage('Sign Image') {
+            steps {
+                sh '''
+                    echo "=== SIGNING IMAGE (Cosign OCI) ==="
+                    chmod +x scripts/sign.sh
+                    COSIGN_PASSWORD=$COSIGN_PWD \
+                    HARBOR_USER=$HARBOR_CREDS_USR \
+                    HARBOR_PASSWORD=$HARBOR_CREDS_PSW \
+                    ./scripts/sign.sh $IMAGE_FULL
+                '''
+            }
+        }
+
+        /* ===== VÉRIFICATION SIGNATURE ===== */
         stage('Verify Signature') {
             steps {
                 sh '''
